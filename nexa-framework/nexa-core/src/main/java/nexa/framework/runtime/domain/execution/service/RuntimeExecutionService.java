@@ -14,6 +14,7 @@ import nexa.framework.runtime.domain.scheduler.model.InputNodeRuntimeState;
 import nexa.framework.runtime.api.model.RuntimeMessage;
 import nexa.framework.runtime.domain.statistics.model.RuntimeStatisticsSnapshot;
 
+import java.time.Duration;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -110,9 +111,46 @@ public final class RuntimeExecutionService {
         if (inputActivator != null) inputActivator.activateWorkspaceInputs(workspaceRuntime, runtimeStarted);
     }
 
+    /**
+     * Disable new input without cancelling executions that are already in flight.
+     * This is used by graceful shutdown so downstream plugins remain available until
+     * all accepted messages have finished processing.
+     */
+    public void disableWorkspaceRuntime(WorkspaceRuntime workspaceRuntime) {
+        if (inputActivator != null) inputActivator.stopWorkspaceRuntime(workspaceRuntime);
+    }
+
     public void stopWorkspaceRuntime(WorkspaceRuntime workspaceRuntime) {
         if (inputActivator != null) inputActivator.stopWorkspaceRuntime(workspaceRuntime);
         lifecycleManager.stopWorkspaceRuntime(workspaceRuntime);
+    }
+
+    /**
+     * Wait until all executions already accepted by the runtime have completed.
+     * No new executions should be accepted after the workspace has been disabled.
+     */
+    public boolean awaitWorkspaceExecutions(ConcurrentMap<String, WorkspaceRuntime> workspaces, Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            boolean running = false;
+            for (WorkspaceRuntime workspace : workspaces.values()) {
+                for (FlowRuntime flow : workspace.flowsById().values()) {
+                    if (!flow.activeExecutions().isEmpty()) {
+                        running = true;
+                        break;
+                    }
+                }
+                if (running) break;
+            }
+            if (!running) return true;
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     public static WorkspaceRuntime requireWorkspace(ConcurrentMap<String, WorkspaceRuntime> workspaces, String workspaceId) {
