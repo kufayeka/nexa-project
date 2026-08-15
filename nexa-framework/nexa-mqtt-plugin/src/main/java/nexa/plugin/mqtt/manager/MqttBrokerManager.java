@@ -1,6 +1,8 @@
 package nexa.plugin.mqtt.manager;
 
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -10,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
@@ -18,14 +21,18 @@ import java.util.function.BiConsumer;
 /**
  * Registry and connection pool for shared MQTT clients.
  *
- * A single physical MqttClient may be shared by multiple Nexa input/output nodes.
- * Inbound subscriptions are fanned out to logical node listeners.
- * Outbound messages are handled by a bounded queue and dedicated publisher workers.
+ * Outbound publishing is deliberately split into two stages:
+ * 1. Nexa execution threads only enqueue into a bounded queue.
+ * 2. Publisher workers submit messages using Paho's non-blocking MqttTopic API.
+ *
+ * A per-client semaphore limits the number of outstanding deliveries so the
+ * queue cannot outrun Paho's in-flight window indefinitely.
  */
 public final class MqttBrokerManager {
     private static final int DEFAULT_QUEUE_CAPACITY = 8192;
     private static final String DEFAULT_OVERFLOW_STRATEGY = "BLOCK";
-    private static final int DEFAULT_WORKER_THREADS = 1;
+    private static final int DEFAULT_WORKER_THREADS = 2;
+    private static final int DEFAULT_MAX_INFLIGHT = 5000;
     private static final long DEFAULT_ENQUEUE_TIMEOUT_MS = 5L;
 
     private static final ConcurrentHashMap<String, MqttClient> clientPool = new ConcurrentHashMap<>();
@@ -67,7 +74,7 @@ public final class MqttBrokerManager {
                     options.setKeepAliveInterval(keepAlive);
                     options.setCleanSession(true);
                     options.setAutomaticReconnect(true);
-                    options.setMaxInflight(500);
+                    options.setMaxInflight(publishConfig.maxInflight());
 
                     client.connect(options);
                     clientPool.put(brokerUrl, client);
@@ -86,7 +93,10 @@ public final class MqttBrokerManager {
         return client;
     }
 
-    /** Enqueues an outbound MQTT message for the shared physical client. */
+    /**
+     * Enqueues an outbound MQTT message. No network operation is performed on
+     * the Nexa flow execution thread.
+     */
     public static boolean publish(MqttClient client, String topic, MqttMessage message) {
         if (client == null || topic == null || topic.isBlank() || message == null) {
             return false;
@@ -228,16 +238,28 @@ public final class MqttBrokerManager {
         private final int capacity;
         private final String overflowStrategy;
         private final int workerThreads;
+        private final int maxInflight;
 
-        public PublishConfig(boolean enabled, int capacity, String overflowStrategy, int workerThreads) {
+        public PublishConfig(
+                boolean enabled,
+                int capacity,
+                String overflowStrategy,
+                int workerThreads,
+                int maxInflight) {
             this.enabled = enabled;
             this.capacity = Math.max(1, capacity);
             this.overflowStrategy = normalizeOverflowStrategy(overflowStrategy);
             this.workerThreads = Math.max(1, workerThreads);
+            this.maxInflight = Math.max(1, maxInflight);
         }
 
         public static PublishConfig defaults() {
-            return new PublishConfig(true, DEFAULT_QUEUE_CAPACITY, DEFAULT_OVERFLOW_STRATEGY, DEFAULT_WORKER_THREADS);
+            return new PublishConfig(
+                    true,
+                    DEFAULT_QUEUE_CAPACITY,
+                    DEFAULT_OVERFLOW_STRATEGY,
+                    DEFAULT_WORKER_THREADS,
+                    DEFAULT_MAX_INFLIGHT);
         }
 
         /**
@@ -246,11 +268,12 @@ public final class MqttBrokerManager {
          *   "publish": {
          *     "queue": {
          *       "enabled": true,
-         *       "capacity": 10000,
+         *       "capacity": 50000,
          *       "overflowStrategy": "BLOCK"
          *     },
          *     "worker": {
-         *       "threads": 2
+         *       "threads": 2,
+         *       "maxInflight": 5000
          *     }
          *   }
          * }
@@ -265,6 +288,7 @@ public final class MqttBrokerManager {
             int capacity = DEFAULT_QUEUE_CAPACITY;
             String overflowStrategy = DEFAULT_OVERFLOW_STRATEGY;
             int workerThreads = DEFAULT_WORKER_THREADS;
+            int maxInflight = DEFAULT_MAX_INFLIGHT;
 
             Object queueValue = publish.get("queue");
             if (queueValue instanceof Map<?, ?> queue) {
@@ -276,15 +300,17 @@ public final class MqttBrokerManager {
             Object workerValue = publish.get("worker");
             if (workerValue instanceof Map<?, ?> worker) {
                 workerThreads = intValue(worker.get("threads"), workerThreads);
+                maxInflight = intValue(worker.get("maxInflight"), maxInflight);
             }
 
-            return new PublishConfig(enabled, capacity, overflowStrategy, workerThreads);
+            return new PublishConfig(enabled, capacity, overflowStrategy, workerThreads, maxInflight);
         }
 
         public boolean enabled() { return enabled; }
         public int capacity() { return capacity; }
         public String overflowStrategy() { return overflowStrategy; }
         public int workerThreads() { return workerThreads; }
+        public int maxInflight() { return maxInflight; }
 
         private static String normalizeOverflowStrategy(String value) {
             if (value == null) return DEFAULT_OVERFLOW_STRATEGY;
@@ -322,6 +348,7 @@ public final class MqttBrokerManager {
         private final MqttClient client;
         private final ArrayBlockingQueue<PublishRequest> queue;
         private final AtomicBoolean running = new AtomicBoolean(true);
+        private final Semaphore inflight;
         private volatile PublishConfig config;
         private volatile Thread[] threads;
 
@@ -329,13 +356,38 @@ public final class MqttBrokerManager {
             this.client = client;
             this.config = config;
             this.queue = new ArrayBlockingQueue<>(config.capacity());
+            this.inflight = new Semaphore(config.maxInflight());
+            installDeliveryCallback();
             startThreads(config.workerThreads());
+        }
+
+        private void installDeliveryCallback() {
+            client.setCallback(new MqttCallback() {
+                @Override
+                public void connectionLost(Throwable cause) {
+                    if (cause != null && running.get()) {
+                        System.err.println("[MQTT Pool] Connection lost: " + cause.getMessage());
+                    }
+                }
+
+                @Override
+                public void messageArrived(String topic, MqttMessage message) {
+                    // Inbound traffic is handled through shared subscriptions.
+                }
+
+                @Override
+                public void deliveryComplete(IMqttDeliveryToken token) {
+                    inflight.release();
+                }
+            });
         }
 
         private void startThreads(int count) {
             Thread[] created = new Thread[count];
             for (int i = 0; i < count; i++) {
-                Thread thread = new Thread(this::run, "Nexa-MQTT-Publisher-" + client.getClientId() + "-" + (i + 1));
+                Thread thread = new Thread(
+                        this::run,
+                        "Nexa-MQTT-Publisher-" + client.getClientId() + "-" + (i + 1));
                 thread.setDaemon(true);
                 thread.start();
                 created[i] = thread;
@@ -375,13 +427,45 @@ public final class MqttBrokerManager {
                 try {
                     PublishRequest request = queue.poll(100, TimeUnit.MILLISECONDS);
                     if (request == null) continue;
-                    if (!client.isConnected()) continue;
-                    client.publish(request.topic, request.message);
+
+                    inflight.acquire();
+                    boolean submitted = false;
+                    try {
+                        if (!client.isConnected()) {
+                            continue;
+                        }
+
+                        // MqttTopic.publish is the non-blocking publish API of the
+                        // classic MqttClient. It returns after Paho accepts the
+                        // message and completes delivery in the background.
+                        client.getTopic(request.topic).publish(request.message)
+                                .setActionCallback(new org.eclipse.paho.client.mqttv3.IMqttActionListener() {
+                                    @Override
+                                    public void onSuccess(org.eclipse.paho.client.mqttv3.IMqttToken asyncActionToken) {
+                                        // deliveryComplete releases the permit.
+                                    }
+
+                                    @Override
+                                    public void onFailure(
+                                            org.eclipse.paho.client.mqttv3.IMqttToken asyncActionToken,
+                                            Throwable exception) {
+                                        inflight.release();
+                                        if (running.get() && exception != null) {
+                                            System.err.println("[MQTT Pool] Async publish error: " + exception.getMessage());
+                                        }
+                                    }
+                                });
+                        submitted = true;
+                    } finally {
+                        if (!submitted) {
+                            inflight.release();
+                        }
+                    }
                 } catch (InterruptedException e) {
                     if (!running.get()) break;
                 } catch (Exception e) {
-                    if (running.get() && client.isConnected()) {
-                        System.err.println("[MQTT Pool] Publish worker error: " + e.getMessage());
+                    if (running.get()) {
+                        System.err.println("[MQTT Pool] Async publish worker error: " + e.getMessage());
                     }
                 }
             }
