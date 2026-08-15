@@ -59,7 +59,8 @@ public final class DefaultExecutionService implements ExecutionService {
     public void disable(String workspaceId) {
         WorkspaceRuntime workspaceRuntime = RuntimeExecutionService.requireWorkspace(workspaces, workspaceId);
         workspaceRuntime.setEnabled(false);
-        executionEngine.stopWorkspaceRuntime(workspaceRuntime);
+        // Stop accepting new input, but let executions already in flight finish.
+        executionEngine.disableWorkspaceRuntime(workspaceRuntime);
     }
 
     @Override
