@@ -7,8 +7,11 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
@@ -18,11 +21,19 @@ import java.util.function.BiConsumer;
  * A single physical MqttClient may be shared by multiple Nexa input nodes.
  * Paho must therefore have exactly one listener per topic from this manager,
  * while the manager fans each received message out to all registered node listeners.
+ *
+ * Outbound messages are queued per physical MQTT client. Flow execution threads
+ * never call Paho publish directly, preventing a slow broker or a full Paho
+ * inflight window from blocking/failing the execution pipeline.
  */
 public final class MqttBrokerManager {
+    private static final int PUBLISH_QUEUE_CAPACITY = 8192;
+    private static final long PUBLISH_ENQUEUE_TIMEOUT_MS = 5L;
+
     private static final ConcurrentHashMap<String, MqttClient> clientPool = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, MqttClient> lookupRegistry = new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, SharedSubscription> subscriptions = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, PublishWorker> publishWorkers = new ConcurrentHashMap<>();
     private static final ReentrantLock lock = new ReentrantLock();
 
     private MqttBrokerManager() {
@@ -37,6 +48,7 @@ public final class MqttBrokerManager {
                 MqttClient existingClient = clientPool.get(brokerUrl);
                 if (existingClient == null || !existingClient.isConnected()) {
                     if (existingClient != null) {
+                        stopPublishWorker(existingClient, true);
                         try {
                             existingClient.close();
                         } catch (Exception ignored) {
@@ -63,6 +75,33 @@ public final class MqttBrokerManager {
             }
         }
         return client;
+    }
+
+    /**
+     * Enqueues an outbound MQTT message for the shared client.
+     * This method is intentionally non-blocking from the flow execution point
+     * of view; only a very small bounded offer is used for backpressure.
+     *
+     * @return true when the message was accepted by the queue, false when the
+     *         queue is saturated or the client is unavailable
+     */
+    public static boolean publish(MqttClient client, String topic, MqttMessage message) {
+        if (client == null || topic == null || topic.isBlank() || message == null) {
+            return false;
+        }
+        if (!client.isConnected()) {
+            return false;
+        }
+
+        PublishWorker worker = publishWorkers.computeIfAbsent(
+                client.getClientId(),
+                ignored -> new PublishWorker(client));
+
+        boolean accepted = worker.enqueue(new PublishRequest(topic, copyMessage(message)));
+        if (!accepted) {
+            System.err.println("[MQTT Pool] Publish queue full, dropping message for topic: " + topic);
+        }
+        return accepted;
     }
 
     /**
@@ -135,6 +174,8 @@ public final class MqttBrokerManager {
                     return subscription.client == client;
                 });
 
+                stopPublishWorker(client, true);
+
                 try {
                     if (client.isConnected()) client.disconnect();
                 } catch (Exception ignored) {
@@ -167,6 +208,86 @@ public final class MqttBrokerManager {
 
     private static String subscriptionKey(MqttClient client, String topic) {
         return client.getClientId() + "\u0000" + topic;
+    }
+
+    private static MqttMessage copyMessage(MqttMessage source) {
+        MqttMessage copy = new MqttMessage(source.getPayload().clone());
+        copy.setQos(source.getQos());
+        copy.setRetained(source.isRetained());
+        copy.setDup(source.isDuplicate());
+        return copy;
+    }
+
+    private static void stopPublishWorker(MqttClient client, boolean drain) {
+        PublishWorker worker = publishWorkers.remove(client.getClientId());
+        if (worker != null) {
+            worker.shutdown(drain);
+        }
+    }
+
+    private static final class PublishRequest {
+        private final String topic;
+        private final MqttMessage message;
+
+        private PublishRequest(String topic, MqttMessage message) {
+            this.topic = topic;
+            this.message = message;
+        }
+    }
+
+    private static final class PublishWorker {
+        private final MqttClient client;
+        private final ArrayBlockingQueue<PublishRequest> queue = new ArrayBlockingQueue<>(PUBLISH_QUEUE_CAPACITY);
+        private final AtomicBoolean running = new AtomicBoolean(true);
+        private final Thread thread;
+
+        private PublishWorker(MqttClient client) {
+            this.client = client;
+            this.thread = new Thread(this::run, "Nexa-MQTT-Publisher-" + client.getClientId());
+            this.thread.setDaemon(true);
+            this.thread.start();
+        }
+
+        private boolean enqueue(PublishRequest request) {
+            if (!running.get()) return false;
+            try {
+                return queue.offer(request, PUBLISH_ENQUEUE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+
+        private void run() {
+            while (running.get() || !queue.isEmpty()) {
+                try {
+                    PublishRequest request = queue.poll(100, TimeUnit.MILLISECONDS);
+                    if (request == null) continue;
+                    if (!client.isConnected()) continue;
+                    client.publish(request.topic, request.message);
+                } catch (InterruptedException e) {
+                    if (!running.get()) break;
+                } catch (Exception e) {
+                    if (running.get() && client.isConnected()) {
+                        System.err.println("[MQTT Pool] Publish worker error: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        private void shutdown(boolean drain) {
+            if (!running.compareAndSet(true, false)) return;
+            if (!drain) queue.clear();
+            thread.interrupt();
+            try {
+                thread.join(5000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            if (thread.isAlive()) {
+                queue.clear();
+            }
+        }
     }
 
     private static final class SharedSubscription {
