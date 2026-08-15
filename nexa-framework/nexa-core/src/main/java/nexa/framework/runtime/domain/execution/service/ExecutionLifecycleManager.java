@@ -3,7 +3,7 @@ package nexa.framework.runtime.domain.execution.service;
 import nexa.framework.runtime.domain.execution.model.ActiveExecution;
 import nexa.framework.runtime.domain.execution.model.FlowRuntime;
 import nexa.framework.runtime.domain.execution.model.WorkspaceRuntime;
-
+import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
 import nexa.framework.runtime.api.RuntimeConfiguration;
 import nexa.framework.runtime.domain.deployment.model.CompiledNode;
 import nexa.framework.runtime.domain.execution.model.ExecutionContext;
@@ -22,194 +22,102 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 final class ExecutionLifecycleManager {
-
     private static final String DEFAULT_PORT = "default";
-
     private final RuntimeConfiguration configuration;
     private final ScheduledExecutorService scheduler;
     private final RuntimeExecutionService executionService;
 
-    ExecutionLifecycleManager(
-            RuntimeConfiguration configuration,
-            ScheduledExecutorService scheduler,
-            RuntimeExecutionService executionService) {
+    ExecutionLifecycleManager(RuntimeConfiguration configuration, ScheduledExecutorService scheduler, RuntimeExecutionService executionService) {
         this.configuration = configuration;
         this.scheduler = scheduler;
         this.executionService = executionService;
     }
 
-    void executeTriggeredInput(
-            WorkspaceRuntime workspaceRuntime,
-            FlowRuntime flowRuntime,
-            CompiledNode inputNode,
-            RuntimeMessage seedMessage) {
-        InputNodeRuntimeState inputState = flowRuntime.inputStateByNodeId().computeIfAbsent(
-                inputNode.id(),
-                ignored -> new InputNodeRuntimeState(inputNode.inputPolicy().maxConcurrentExecutions()));
-
-        boolean acquired = inputState.executionGate().tryAcquire();
-        if (!acquired) {
+    void executeTriggeredInput(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, CompiledNode inputNode, RuntimeMessage seedMessage) {
+        InputNodeRuntimeState inputState = flowRuntime.inputStateByNodeId().computeIfAbsent(inputNode.id(), ignored -> new InputNodeRuntimeState(inputNode.inputPolicy().maxConcurrentExecutions()));
+        if (!inputState.executionGate().tryAcquire()) {
             flowRuntime.statistics().incrementRejected();
             return;
         }
-
         Instant createdAt = Instant.now();
-        Instant deadline = createdAt.plus(configuration.maxExecutionLifetime());
-
-        ExecutionContext context = new ExecutionContext(
-                workspaceRuntime.workspaceId(),
-                flowRuntime.compiledFlow().flowId(),
-                createdAt,
-                deadline);
+        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()));
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, inputNode.id()));
-
         flowRuntime.statistics().incrementRunning();
         context.retainTask();
+        context.setTimeoutTask(scheduler.schedule(() -> cancelExecution(flowRuntime, context.executionId(), true), configuration.maxExecutionLifetime().toMillis(), TimeUnit.MILLISECONDS));
+        executionService.nodeExecutor().submitNodeRoutes(flowRuntime, context.executionId(), inputNode.id(), DEFAULT_PORT, seedMessage);
+        completeTask(flowRuntime, context.executionId());
+    }
 
-        ScheduledFuture<?> timeoutTask = scheduler.schedule(
-                () -> cancelExecution(flowRuntime, context.executionId(), true),
-                configuration.maxExecutionLifetime().toMillis(),
-                TimeUnit.MILLISECONDS);
-        context.setTimeoutTask(timeoutTask);
+    void injectMessageIntoConnection(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime,
+            CompiledConnection connection, RuntimeMessage message) {
+        if (!workspaceRuntime.enabled() || !connection.enabled()) return;
+        if (!flowRuntime.compiledFlow().connection(connection.id()).enabled()) return;
 
-        executionService.nodeExecutor().submitNodeRoutes(
-                flowRuntime,
-                context.executionId(),
-                inputNode.id(),
-                DEFAULT_PORT,
-                seedMessage);
+        Instant createdAt = Instant.now();
+        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()));
+        flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, connection.sourceNodeId()));
+        flowRuntime.statistics().incrementRunning();
+        context.retainTask();
+        context.setTimeoutTask(scheduler.schedule(() -> cancelExecution(flowRuntime, context.executionId(), true), configuration.maxExecutionLifetime().toMillis(), TimeUnit.MILLISECONDS));
+
+        executionService.nodeExecutor().submitConnectionTarget(flowRuntime, context.executionId(), connection, message == null ? new RuntimeMessage() : message.deepCopy());
         completeTask(flowRuntime, context.executionId());
     }
 
     void completeTask(FlowRuntime flowRuntime, UUID executionId) {
         ActiveExecution activeExecution = flowRuntime.activeExecutions().get(executionId);
-        if (activeExecution == null) {
-            return;
-        }
-
-        if (activeExecution.context().releaseTask() > 0) {
-            return;
-        }
-
+        if (activeExecution == null) return;
+        if (activeExecution.context().releaseTask() > 0) return;
         finalizeExecution(flowRuntime, activeExecution);
     }
 
     void finalizeExecution(FlowRuntime flowRuntime, ActiveExecution activeExecution) {
         ExecutionContext context = activeExecution.context();
-
         if (context.status() == ExecutionStatus.RUNNING) {
-            if (context.isCancellationRequested()) {
-                context.markCancelled();
-            } else {
-                context.markCompleted();
-            }
+            if (context.isCancellationRequested()) context.markCancelled(); else context.markCompleted();
         }
-
-        if (context.timeoutTask() != null) {
-            context.timeoutTask().cancel(false);
-        }
-
-        if (context.status() == ExecutionStatus.FAILED) {
-            flowRuntime.statistics().incrementFailed();
-        } else if (context.status() == ExecutionStatus.CANCELLED || context.status() == ExecutionStatus.TIMED_OUT) {
-            flowRuntime.statistics().incrementCancelled();
-        } else if (context.status() == ExecutionStatus.COMPLETED) {
-            flowRuntime.statistics().incrementCompleted();
-        }
-
+        if (context.timeoutTask() != null) context.timeoutTask().cancel(false);
+        if (context.status() == ExecutionStatus.FAILED) flowRuntime.statistics().incrementFailed();
+        else if (context.status() == ExecutionStatus.CANCELLED || context.status() == ExecutionStatus.TIMED_OUT) flowRuntime.statistics().incrementCancelled();
+        else if (context.status() == ExecutionStatus.COMPLETED) flowRuntime.statistics().incrementCompleted();
         flowRuntime.statistics().addDurationNanos(Duration.between(context.createdAt(), Instant.now()).toNanos());
         flowRuntime.statistics().decrementRunning();
-
         InputNodeRuntimeState inputState = flowRuntime.inputStateByNodeId().get(activeExecution.inputNodeId());
-        if (inputState != null) {
-            inputState.executionGate().release();
-        }
-
+        if (inputState != null) inputState.executionGate().release();
         flowRuntime.activeExecutions().remove(context.executionId());
-
-        List<Future<?>> futuresSnapshot = snapshotFutures(activeExecution.futures());
-        for (Future<?> future : futuresSnapshot) {
-            if (!future.isDone()) {
-                future.cancel(true);
-            }
-        }
-
+        for (Future<?> future : snapshotFutures(activeExecution.futures())) if (!future.isDone()) future.cancel(true);
         context.cleanup();
     }
 
     void cancelExecution(FlowRuntime flowRuntime, UUID executionId, boolean timeoutTriggered) {
         ActiveExecution activeExecution = flowRuntime.activeExecutions().get(executionId);
-        if (activeExecution == null) {
-            return;
-        }
-
+        if (activeExecution == null) return;
         ExecutionContext context = activeExecution.context();
-        if (!context.requestCancellation()) {
-            return;
-        }
-
-        if (timeoutTriggered) {
-            context.markTimedOut();
-        } else {
-            context.markCancelled();
-        }
-
-        List<Future<?>> futuresSnapshot = snapshotFutures(activeExecution.futures());
-        for (Future<?> future : futuresSnapshot) {
-            if (!future.isDone()) {
-                future.cancel(true);
-            }
-        }
+        if (!context.requestCancellation()) return;
+        if (timeoutTriggered) context.markTimedOut(); else context.markCancelled();
+        for (Future<?> future : snapshotFutures(activeExecution.futures())) if (!future.isDone()) future.cancel(true);
     }
 
     void stopWorkspaceRuntime(WorkspaceRuntime workspaceRuntime) {
         for (FlowRuntime flowRuntime : workspaceRuntime.flowsById().values()) {
-            for (InputNodeRuntimeState inputState : flowRuntime.inputStateByNodeId().values()) {
-                inputState.cancelAllScheduledTriggers();
-            }
-
-            for (UUID executionId : flowRuntime.activeExecutions().keySet()) {
-                cancelExecution(flowRuntime, executionId, false);
-            }
+            for (InputNodeRuntimeState inputState : flowRuntime.inputStateByNodeId().values()) inputState.cancelAllScheduledTriggers();
+            for (UUID executionId : flowRuntime.activeExecutions().keySet()) cancelExecution(flowRuntime, executionId, false);
         }
     }
 
     private List<Future<?>> snapshotFutures(List<Future<?>> futures) {
-        synchronized (futures) {
-            return new ArrayList<>(futures);
-        }
+        synchronized (futures) { return new ArrayList<>(futures); }
     }
 
-    void injectMessage(
-            WorkspaceRuntime workspaceRuntime,
-            FlowRuntime flowRuntime,
-            String sourceNodeId,
-            RuntimeMessage message) {
+    void injectMessage(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, String sourceNodeId, RuntimeMessage message) {
         Instant createdAt = Instant.now();
-        Instant deadline = createdAt.plus(configuration.maxExecutionLifetime());
-
-        ExecutionContext context = new ExecutionContext(
-                workspaceRuntime.workspaceId(),
-                flowRuntime.compiledFlow().flowId(),
-                createdAt,
-                deadline);
+        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()));
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, sourceNodeId));
-
         flowRuntime.statistics().incrementRunning();
         context.retainTask();
-
-        ScheduledFuture<?> timeoutTask = scheduler.schedule(
-                () -> cancelExecution(flowRuntime, context.executionId(), true),
-                configuration.maxExecutionLifetime().toMillis(),
-                TimeUnit.MILLISECONDS);
-        context.setTimeoutTask(timeoutTask);
-
-        executionService.nodeExecutor().submitNodeRoutes(
-                flowRuntime,
-                context.executionId(),
-                sourceNodeId,
-                DEFAULT_PORT,
-                message);
+        context.setTimeoutTask(scheduler.schedule(() -> cancelExecution(flowRuntime, context.executionId(), true), configuration.maxExecutionLifetime().toMillis(), TimeUnit.MILLISECONDS));
+        executionService.nodeExecutor().submitNodeRoutes(flowRuntime, context.executionId(), sourceNodeId, DEFAULT_PORT, message);
         completeTask(flowRuntime, context.executionId());
     }
 }
