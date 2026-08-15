@@ -120,22 +120,16 @@ public final class RuntimeExecutionService {
         lifecycleManager.stopWorkspaceRuntime(workspaceRuntime);
     }
 
-    /**
-     * Wait for all currently accepted executions to drain. New executions are blocked
-     * because shutdown disables every workspace before this method is called.
-     */
-    public boolean awaitWorkspaceExecutions(ConcurrentMap<String, WorkspaceRuntime> workspaces) {
+    /** Wait until every execution already accepted by one workspace has finished. */
+    public boolean awaitWorkspaceExecutions(WorkspaceRuntime workspaceRuntime) {
         long deadline = System.nanoTime() + configuration.maxExecutionLifetime().toNanos();
         while (System.nanoTime() < deadline) {
             boolean running = false;
-            for (WorkspaceRuntime workspace : workspaces.values()) {
-                for (FlowRuntime flow : workspace.flowsById().values()) {
-                    if (!flow.activeExecutions().isEmpty()) {
-                        running = true;
-                        break;
-                    }
+            for (FlowRuntime flow : workspaceRuntime.flowsById().values()) {
+                if (!flow.activeExecutions().isEmpty()) {
+                    running = true;
+                    break;
                 }
-                if (running) break;
             }
             if (!running) return true;
             try {
