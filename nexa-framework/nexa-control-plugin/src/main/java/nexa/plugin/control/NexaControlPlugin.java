@@ -1,6 +1,8 @@
 package nexa.plugin.control;
 
 import io.javalin.Javalin;
+import io.javalin.openapi.plugin.OpenApiPlugin;
+import io.javalin.openapi.plugin.swagger.SwaggerPlugin;
 import io.moquette.broker.Server;
 import io.moquette.broker.config.MemoryConfig;
 import io.netty.buffer.Unpooled;
@@ -64,7 +66,18 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             }
         });
 
-        app = Javalin.create().start(8080);
+        app = Javalin.create(config -> {
+            config.registerPlugin(new OpenApiPlugin(pluginConfig -> {
+                pluginConfig.withDefinitionConfiguration((version, definition) -> {
+                    definition.withInfo(info -> {
+                        info.setTitle("Nexa Control API");
+                        info.setVersion("1.0.0");
+                        info.setDescription("REST control and monitoring API for the Nexa Runtime.");
+                    });
+                });
+            }));
+            config.registerPlugin(new SwaggerPlugin());
+        }).start(8080);
 
         // --- Workspace Control ---
         app.post("/api/workspace/load", ctx -> {
