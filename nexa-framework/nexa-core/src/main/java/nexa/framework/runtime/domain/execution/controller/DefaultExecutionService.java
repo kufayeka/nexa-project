@@ -59,8 +59,15 @@ public final class DefaultExecutionService implements ExecutionService {
     public void disable(String workspaceId) {
         WorkspaceRuntime workspaceRuntime = RuntimeExecutionService.requireWorkspace(workspaces, workspaceId);
         workspaceRuntime.setEnabled(false);
-        // Stop accepting new input, but let executions already in flight finish.
+
+        // First stop accepting new input. Existing executions are allowed to drain.
         executionEngine.disableWorkspaceRuntime(workspaceRuntime);
+
+        boolean drained = executionEngine.awaitWorkspaceExecutions(workspaceRuntime);
+        if (!drained) {
+            System.err.println("[RUNTIME] Workspace did not drain before execution lifetime expired: "
+                    + workspaceId);
+        }
     }
 
     @Override
