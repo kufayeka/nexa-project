@@ -2,20 +2,22 @@ package nexa.framework.runtime.domain.deployment.model;
 
 import nexa.framework.runtime.domain.deployment.exception.ValidationException;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public final class CompiledFlow {
 
     private final String flowId;
     private final String flowName;
     private final boolean enabled;
-    private final Map<String, CompiledNode> nodeById;
-    private final Map<String, Map<String, List<String>>> routesByNodeAndPort;
-    private final Map<String, CompiledConnection> connectionById;
+    private final ConcurrentMap<String, CompiledNode> nodeById;
+    private final ConcurrentMap<String, Map<String, List<String>>> routesByNodeAndPort;
+    private final ConcurrentMap<String, CompiledConnection> connectionById;
 
     public CompiledFlow(
             String flowId,
@@ -29,8 +31,10 @@ public final class CompiledFlow {
         this.flowName = flowName;
         this.enabled = enabled;
         this.nodeById = new ConcurrentHashMap<>(new LinkedHashMap<>(nodeById));
-        this.routesByNodeAndPort = Collections.unmodifiableMap(new LinkedHashMap<>(routesByNodeAndPort));
-        this.connectionById = Collections.unmodifiableMap(new LinkedHashMap<>(connectionById));
+        this.routesByNodeAndPort = new ConcurrentHashMap<>();
+        this.connectionById = new ConcurrentHashMap<>(new LinkedHashMap<>(connectionById));
+
+        rebuildRoutes();
     }
 
     public String flowId() {
@@ -50,11 +54,21 @@ public final class CompiledFlow {
     }
 
     public Map<String, Map<String, List<String>>> routesByNodeAndPort() {
-        return routesByNodeAndPort;
+        Map<String, Map<String, List<String>>> snapshot = new LinkedHashMap<>();
+
+        for (Map.Entry<String, Map<String, List<String>>> entry : routesByNodeAndPort.entrySet()) {
+            Map<String, List<String>> byPort = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> portEntry : entry.getValue().entrySet()) {
+                byPort.put(portEntry.getKey(), List.copyOf(portEntry.getValue()));
+            }
+            snapshot.put(entry.getKey(), Collections.unmodifiableMap(byPort));
+        }
+
+        return Collections.unmodifiableMap(snapshot);
     }
 
     public Map<String, CompiledConnection> connectionById() {
-        return connectionById;
+        return Collections.unmodifiableMap(new LinkedHashMap<>(connectionById));
     }
 
     public CompiledConnection connection(String connectionId) {
@@ -62,7 +76,7 @@ public final class CompiledFlow {
     }
 
     public List<String> inputNodeIds() {
-        java.util.ArrayList<String> inputIds = new java.util.ArrayList<>();
+        ArrayList<String> inputIds = new ArrayList<>();
 
         for (CompiledNode node : nodeById.values()) {
             if (node.category() == nexa.framework.runtime.domain.workspace.model.NodeCategory.INPUT) {
@@ -110,5 +124,61 @@ public final class CompiledFlow {
                 node.config(),
                 node.language(),
                 node.compiledScript()));
+    }
+
+    public synchronized void setConnectionEnabled(String connectionId, boolean enabled) {
+        CompiledConnection connection = connectionById.get(connectionId);
+
+        if (connection == null) {
+            throw new ValidationException(
+                    "Unknown connection id " + connectionId + " in flow " + flowId);
+        }
+
+        if (connection.enabled() == enabled) {
+            return;
+        }
+
+        connectionById.put(connectionId, new CompiledConnection(
+                connection.id(),
+                connection.sourceNodeId(),
+                connection.sourcePort(),
+                connection.targetNodeId(),
+                enabled));
+
+        rebuildRoutes();
+    }
+
+    private synchronized void rebuildRoutes() {
+        Map<String, Map<String, List<String>>> rebuilt = new LinkedHashMap<>();
+
+        for (String nodeId : nodeById.keySet()) {
+            rebuilt.put(nodeId, new LinkedHashMap<>());
+        }
+
+        for (CompiledConnection connection : connectionById.values()) {
+            if (!connection.enabled()) {
+                continue;
+            }
+
+            Map<String, List<String>> byPort = rebuilt.get(connection.sourceNodeId());
+            if (byPort == null) {
+                throw new ValidationException(
+                        "Connection " + connection.id()
+                                + " references unknown source node "
+                                + connection.sourceNodeId());
+            }
+
+            byPort.computeIfAbsent(connection.sourcePort(), ignored -> new ArrayList<>())
+                    .add(connection.targetNodeId());
+        }
+
+        routesByNodeAndPort.clear();
+        for (Map.Entry<String, Map<String, List<String>>> entry : rebuilt.entrySet()) {
+            Map<String, List<String>> byPort = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> portEntry : entry.getValue().entrySet()) {
+                byPort.put(portEntry.getKey(), List.copyOf(portEntry.getValue()));
+            }
+            routesByNodeAndPort.put(entry.getKey(), Collections.unmodifiableMap(byPort));
+        }
     }
 }
