@@ -24,6 +24,7 @@ public final class RuntimeExecutionService {
     private final RuntimeConfiguration configuration;
     private final ScheduledExecutorService scheduler;
     private final ExecutorService workerExecutor;
+    private final nexa.framework.runtime.domain.control.DefaultNodeController nodeController;
     private InputActivator inputActivator;
     private final ExecutionLifecycleManager lifecycleManager;
     private final NodeExecutor nodeExecutor;
@@ -33,6 +34,7 @@ public final class RuntimeExecutionService {
             nexa.framework.runtime.domain.control.DefaultConnectionController connectionController,
             nexa.framework.runtime.domain.control.DefaultNexaEventBus eventBus) {
         this.configuration = configuration;
+        this.nodeController = nodeController;
         this.scheduler = Executors.newScheduledThreadPool(2,
                 Thread.ofPlatform().daemon(true).name("nexa-scheduler-", 0).factory());
         this.workerExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nexa-worker-", 0).factory());
@@ -41,9 +43,16 @@ public final class RuntimeExecutionService {
     }
 
     public void setInputActivator(InputActivator inputActivator) { this.inputActivator = inputActivator; }
-    public void executeTriggeredInput(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, CompiledNode inputNode, RuntimeMessage seedMessage) {
+
+    public void executeTriggeredInput(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime,
+            CompiledNode inputNode, RuntimeMessage seedMessage) {
+        if (!workspaceRuntime.enabled() || !flowRuntime.compiledFlow().enabled()
+                || !inputNode.enabled() || nodeController.isNodeDisabled(inputNode.id())) {
+            return;
+        }
         lifecycleManager.executeTriggeredInput(workspaceRuntime, flowRuntime, inputNode, seedMessage);
     }
+
     public ExecutionLifecycleManager lifecycleManager() { return lifecycleManager; }
     public NodeExecutor nodeExecutor() { return nodeExecutor; }
     public ScheduledExecutorService scheduler() { return scheduler; }
@@ -91,13 +100,16 @@ public final class RuntimeExecutionService {
         if (inputNode == null || inputNode.category() != NodeCategory.INPUT || !inputNode.enabled()) {
             throw new ValidationException("Invalid input node " + inputNodeId + " for flow " + flowId);
         }
+        if (nodeController.isNodeDisabled(inputNode.id())) return;
         RuntimeMessage seed = message == null ? new RuntimeMessage() : message.deepCopy();
         lifecycleManager.executeTriggeredInput(workspaceRuntime, flowRuntime, inputNode, seed);
     }
 
     public void activateWorkspaceInputs(WorkspaceRuntime workspaceRuntime, AtomicBoolean runtimeStarted) {
+        if (!workspaceRuntime.enabled()) return;
         if (inputActivator != null) inputActivator.activateWorkspaceInputs(workspaceRuntime, runtimeStarted);
     }
+
     public void stopWorkspaceRuntime(WorkspaceRuntime workspaceRuntime) {
         if (inputActivator != null) inputActivator.stopWorkspaceRuntime(workspaceRuntime);
         lifecycleManager.stopWorkspaceRuntime(workspaceRuntime);
@@ -116,11 +128,18 @@ public final class RuntimeExecutionService {
     }
 
     public void injectMessage(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, String sourceNodeId, RuntimeMessage message) {
+        if (!workspaceRuntime.enabled() || !flowRuntime.compiledFlow().enabled()
+                || nodeController.isNodeDisabled(sourceNodeId)) {
+            return;
+        }
+        CompiledNode sourceNode = flowRuntime.compiledFlow().node(sourceNodeId);
+        if (sourceNode == null || !sourceNode.enabled()) return;
         lifecycleManager.injectMessage(workspaceRuntime, flowRuntime, sourceNodeId, message);
     }
 
     public void injectMessageIntoConnection(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime,
             CompiledConnection connection, RuntimeMessage message) {
+        if (!workspaceRuntime.enabled() || !connection.enabled()) return;
         lifecycleManager.injectMessageIntoConnection(workspaceRuntime, flowRuntime, connection, message);
     }
 }
