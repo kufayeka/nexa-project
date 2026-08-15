@@ -16,11 +16,18 @@ public record ConnectionDefinition(
         @JsonProperty("targetNodeId") String targetNodeId,
         @JsonProperty("enabled") boolean enabled) {
 
+    public ConnectionDefinition(
+            String id,
+            String sourceNodeId,
+            String sourcePort,
+            String targetNodeId) {
+        this(id, sourceNodeId, sourcePort, targetNodeId, true);
+    }
+
     public ConnectionDefinition {
         if (id == null || id.isBlank()) {
             id = UUID.randomUUID().toString();
         }
-
         if (sourcePort == null || sourcePort.isBlank()) {
             sourcePort = "default";
         }
