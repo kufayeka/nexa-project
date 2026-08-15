@@ -4,5 +4,6 @@ public record CompiledConnection(
         String id,
         String sourceNodeId,
         String sourcePort,
-        String targetNodeId) {
+        String targetNodeId,
+        boolean enabled) {
 }
