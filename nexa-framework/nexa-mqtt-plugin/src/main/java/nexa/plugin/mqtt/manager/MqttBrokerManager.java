@@ -6,6 +6,7 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,17 +19,15 @@ import java.util.function.BiConsumer;
 /**
  * Registry and connection pool for shared MQTT clients.
  *
- * A single physical MqttClient may be shared by multiple Nexa input nodes.
- * Paho must therefore have exactly one listener per topic from this manager,
- * while the manager fans each received message out to all registered node listeners.
- *
- * Outbound messages are queued per physical MQTT client. Flow execution threads
- * never call Paho publish directly, preventing a slow broker or a full Paho
- * inflight window from blocking/failing the execution pipeline.
+ * A single physical MqttClient may be shared by multiple Nexa input/output nodes.
+ * Inbound subscriptions are fanned out to logical node listeners.
+ * Outbound messages are handled by a bounded queue and dedicated publisher workers.
  */
 public final class MqttBrokerManager {
-    private static final int PUBLISH_QUEUE_CAPACITY = 8192;
-    private static final long PUBLISH_ENQUEUE_TIMEOUT_MS = 5L;
+    private static final int DEFAULT_QUEUE_CAPACITY = 8192;
+    private static final String DEFAULT_OVERFLOW_STRATEGY = "BLOCK";
+    private static final int DEFAULT_WORKER_THREADS = 1;
+    private static final long DEFAULT_ENQUEUE_TIMEOUT_MS = 5L;
 
     private static final ConcurrentHashMap<String, MqttClient> clientPool = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, MqttClient> lookupRegistry = new ConcurrentHashMap<>();
@@ -40,6 +39,13 @@ public final class MqttBrokerManager {
     }
 
     public static MqttClient getOrCreateClient(String brokerUrl, int keepAlive) throws Exception {
+        return getOrCreateClient(brokerUrl, keepAlive, PublishConfig.defaults());
+    }
+
+    public static MqttClient getOrCreateClient(
+            String brokerUrl,
+            int keepAlive,
+            PublishConfig publishConfig) throws Exception {
         MqttClient client = clientPool.get(brokerUrl);
 
         if (client == null || !client.isConnected()) {
@@ -66,24 +72,23 @@ public final class MqttBrokerManager {
 
                     client.connect(options);
                     clientPool.put(brokerUrl, client);
+                    configurePublishWorker(client, publishConfig);
                     System.out.println("[MQTT Pool] TCP Connection established to: " + brokerUrl);
                 } else {
                     client = existingClient;
+                    configurePublishWorker(client, publishConfig);
                 }
             } finally {
                 lock.unlock();
             }
+        } else {
+            configurePublishWorker(client, publishConfig);
         }
         return client;
     }
 
     /**
-     * Enqueues an outbound MQTT message for the shared client.
-     * This method is intentionally non-blocking from the flow execution point
-     * of view; only a very small bounded offer is used for backpressure.
-     *
-     * @return true when the message was accepted by the queue, false when the
-     *         queue is saturated or the client is unavailable
+     * Enqueues an outbound MQTT message for the shared physical client.
      */
     public static boolean publish(MqttClient client, String topic, MqttMessage message) {
         if (client == null || topic == null || topic.isBlank() || message == null) {
@@ -95,7 +100,7 @@ public final class MqttBrokerManager {
 
         PublishWorker worker = publishWorkers.computeIfAbsent(
                 client.getClientId(),
-                ignored -> new PublishWorker(client));
+                ignored -> new PublishWorker(client, PublishConfig.defaults()));
 
         boolean accepted = worker.enqueue(new PublishRequest(topic, copyMessage(message)));
         if (!accepted) {
@@ -104,11 +109,16 @@ public final class MqttBrokerManager {
         return accepted;
     }
 
-    /**
-     * Registers a logical node listener on a shared MQTT topic.
-     * Only the first listener causes a real broker subscription. All later
-     * listeners are dispatched by the shared listener installed here.
-     */
+    private static void configurePublishWorker(MqttClient client, PublishConfig config) {
+        publishWorkers.compute(client.getClientId(), (key, existing) -> {
+            if (existing == null) {
+                return new PublishWorker(client, config);
+            }
+            existing.updateConfig(config);
+            return existing;
+        });
+    }
+
     public static void subscribe(
             MqttClient client,
             String topic,
@@ -138,10 +148,6 @@ public final class MqttBrokerManager {
         }
     }
 
-    /**
-     * Removes one logical node listener. The broker subscription remains while
-     * at least one node is still listening to the topic.
-     */
     public static void unsubscribe(MqttClient client, String topic, String subscriberId) {
         if (client == null || topic == null || subscriberId == null) return;
 
@@ -169,11 +175,7 @@ public final class MqttBrokerManager {
         try {
             MqttClient client = clientPool.remove(brokerUrl);
             if (client != null) {
-                subscriptions.entrySet().removeIf(entry -> {
-                    SharedSubscription subscription = entry.getValue();
-                    return subscription.client == client;
-                });
-
+                subscriptions.entrySet().removeIf(entry -> entry.getValue().client == client);
                 stopPublishWorker(client, true);
 
                 try {
@@ -214,7 +216,6 @@ public final class MqttBrokerManager {
         MqttMessage copy = new MqttMessage(source.getPayload().clone());
         copy.setQos(source.getQos());
         copy.setRetained(source.isRetained());
-        copy.setDup(source.isDuplicate());
         return copy;
     }
 
@@ -222,6 +223,76 @@ public final class MqttBrokerManager {
         PublishWorker worker = publishWorkers.remove(client.getClientId());
         if (worker != null) {
             worker.shutdown(drain);
+        }
+    }
+
+    public static final class PublishConfig {
+        private final boolean enabled;
+        private final int capacity;
+        private final String overflowStrategy;
+        private final int workerThreads;
+
+        public PublishConfig(boolean enabled, int capacity, String overflowStrategy, int workerThreads) {
+            this.enabled = enabled;
+            this.capacity = Math.max(1, capacity);
+            this.overflowStrategy = normalizeOverflowStrategy(overflowStrategy);
+            this.workerThreads = Math.max(1, workerThreads);
+        }
+
+        public static PublishConfig defaults() {
+            return new PublishConfig(true, DEFAULT_QUEUE_CAPACITY, DEFAULT_OVERFLOW_STRATEGY, DEFAULT_WORKER_THREADS);
+        }
+
+        public static PublishConfig fromConfig(Map<String, Object> config) {
+            Object publishValue = config == null ? null : config.get("publish");
+            if (!(publishValue instanceof Map<?, ?> publish)) {
+                return defaults();
+            }
+
+            boolean enabled = booleanValue(publish.get("enabled"), true);
+            int capacity = intValue(publish.get("capacity"), DEFAULT_QUEUE_CAPACITY);
+            String overflowStrategy = stringValue(publish.get("overflowStrategy"), DEFAULT_OVERFLOW_STRATEGY);
+            int workerThreads = intValue(publish.get("workerThreads"), DEFAULT_WORKER_THREADS);
+
+            Object queueValue = publish.get("queue");
+            if (queueValue instanceof Map<?, ?> queue) {
+                enabled = booleanValue(queue.get("enabled"), enabled);
+                capacity = intValue(queue.get("capacity"), capacity);
+                overflowStrategy = stringValue(queue.get("overflowStrategy"), overflowStrategy);
+            }
+
+            Object workerValue = publish.get("worker");
+            if (workerValue instanceof Map<?, ?> worker) {
+                workerThreads = intValue(worker.get("threads"), workerThreads);
+            }
+
+            return new PublishConfig(enabled, capacity, overflowStrategy, workerThreads);
+        }
+
+        public boolean enabled() { return enabled; }
+        public int capacity() { return capacity; }
+        public String overflowStrategy() { return overflowStrategy; }
+        public int workerThreads() { return workerThreads; }
+
+        private static String normalizeOverflowStrategy(String value) {
+            if (value == null) return DEFAULT_OVERFLOW_STRATEGY;
+            String normalized = value.trim().toUpperCase();
+            return switch (normalized) {
+                case "BLOCK", "DROP_NEWEST", "DROP_OLDEST" -> normalized;
+                default -> DEFAULT_OVERFLOW_STRATEGY;
+            };
+        }
+
+        private static boolean booleanValue(Object value, boolean fallback) {
+            return value instanceof Boolean b ? b : fallback;
+        }
+
+        private static int intValue(Object value, int fallback) {
+            return value instanceof Number n ? n.intValue() : fallback;
+        }
+
+        private static String stringValue(Object value, String fallback) {
+            return value instanceof String s && !s.isBlank() ? s : fallback;
         }
     }
 
@@ -237,21 +308,52 @@ public final class MqttBrokerManager {
 
     private static final class PublishWorker {
         private final MqttClient client;
-        private final ArrayBlockingQueue<PublishRequest> queue = new ArrayBlockingQueue<>(PUBLISH_QUEUE_CAPACITY);
+        private final ArrayBlockingQueue<PublishRequest> queue;
         private final AtomicBoolean running = new AtomicBoolean(true);
-        private final Thread thread;
+        private volatile PublishConfig config;
+        private volatile Thread[] threads;
 
-        private PublishWorker(MqttClient client) {
+        private PublishWorker(MqttClient client, PublishConfig config) {
             this.client = client;
-            this.thread = new Thread(this::run, "Nexa-MQTT-Publisher-" + client.getClientId());
-            this.thread.setDaemon(true);
-            this.thread.start();
+            this.config = config;
+            this.queue = new ArrayBlockingQueue<>(config.capacity());
+            startThreads(config.workerThreads());
+        }
+
+        private void startThreads(int count) {
+            Thread[] created = new Thread[count];
+            for (int i = 0; i < count; i++) {
+                Thread thread = new Thread(this::run, "Nexa-MQTT-Publisher-" + client.getClientId() + "-" + (i + 1));
+                thread.setDaemon(true);
+                thread.start();
+                created[i] = thread;
+            }
+            this.threads = created;
+        }
+
+        private void updateConfig(PublishConfig nextConfig) {
+            if (nextConfig == null || !running.get()) return;
+            // Queue capacity and worker count are fixed for a worker lifetime.
+            // Configuration is applied when the physical client is first created.
+            this.config = nextConfig;
         }
 
         private boolean enqueue(PublishRequest request) {
-            if (!running.get()) return false;
+            if (!running.get() || !config.enabled()) return false;
+
             try {
-                return queue.offer(request, PUBLISH_ENQUEUE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                return switch (config.overflowStrategy()) {
+                    case "DROP_OLDEST" -> {
+                        if (queue.offer(request)) {
+                            yield true;
+                        }
+                        queue.poll();
+                        yield queue.offer(request);
+                    }
+                    case "DROP_NEWEST" -> queue.offer(request);
+                    case "BLOCK" -> queue.offer(request, DEFAULT_ENQUEUE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    default -> queue.offer(request);
+                };
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return false;
@@ -278,15 +380,24 @@ public final class MqttBrokerManager {
         private void shutdown(boolean drain) {
             if (!running.compareAndSet(true, false)) return;
             if (!drain) queue.clear();
-            thread.interrupt();
-            try {
-                thread.join(5000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+
+            Thread[] currentThreads = threads;
+            for (Thread thread : currentThreads) {
+                thread.interrupt();
             }
-            if (thread.isAlive()) {
-                queue.clear();
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            for (Thread thread : currentThreads) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) break;
+                try {
+                    thread.join(TimeUnit.NANOSECONDS.toMillis(remaining));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
+            if (!queue.isEmpty()) queue.clear();
         }
     }
 
