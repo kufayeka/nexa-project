@@ -12,7 +12,8 @@ public record ConnectionDefinition(
         @JsonProperty("id") String id,
         @JsonProperty("sourceNodeId") String sourceNodeId,
         @JsonProperty("sourcePort") String sourcePort,
-        @JsonProperty("targetNodeId") String targetNodeId) {
+        @JsonProperty("targetNodeId") String targetNodeId,
+        @JsonProperty("enabled") Boolean enabled) {
 
     public ConnectionDefinition {
         if (id == null || id.isBlank()) {
@@ -21,6 +22,10 @@ public record ConnectionDefinition(
 
         if (sourcePort == null || sourcePort.isBlank()) {
             sourcePort = "default";
+        }
+
+        if (enabled == null) {
+            enabled = true;
         }
     }
 }
