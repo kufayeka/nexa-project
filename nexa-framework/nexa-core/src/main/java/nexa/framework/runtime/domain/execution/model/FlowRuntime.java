@@ -20,7 +20,7 @@ public final class FlowRuntime {
     private final ConcurrentMap<String, InputNodeRuntimeState> inputStateByNodeId;
     private final ConcurrentMap<UUID, ActiveExecution> activeExecutions;
     private final ConcurrentMap<String, NodeRuntime> nodeRuntimeById;
-    private final Map<String, Map<String, List<NodeRuntime>>> targetsByNodeAndPort;
+    private final ConcurrentMap<String, ConcurrentMap<String, List<NodeRuntime>>> targetsByNodeAndPort;
 
     public FlowRuntime(String workspaceId, CompiledFlow compiledFlow) {
         this.compiledFlow = compiledFlow;
@@ -33,9 +33,9 @@ public final class FlowRuntime {
             nodeRuntimeById.put(node.id(), new NodeRuntime(node));
         }
 
-        Map<String, Map<String, List<NodeRuntime>>> resolvedTargets = new LinkedHashMap<>();
+        ConcurrentMap<String, ConcurrentMap<String, List<NodeRuntime>>> resolvedTargets = new ConcurrentHashMap<>();
         for (Map.Entry<String, Map<String, List<String>>> sourceEntry : compiledFlow.routesByNodeAndPort().entrySet()) {
-            Map<String, List<NodeRuntime>> resolvedByPort = new LinkedHashMap<>();
+            ConcurrentMap<String, List<NodeRuntime>> resolvedByPort = new ConcurrentHashMap<>();
             for (Map.Entry<String, List<String>> portEntry : sourceEntry.getValue().entrySet()) {
                 List<NodeRuntime> resolvedTargetsForPort = new ArrayList<>();
                 for (String targetNodeId : portEntry.getValue()) {
@@ -46,11 +46,11 @@ public final class FlowRuntime {
                     }
                     resolvedTargetsForPort.add(targetRuntime);
                 }
-                resolvedByPort.put(portEntry.getKey(), List.copyOf(resolvedTargetsForPort));
+                resolvedByPort.put(portEntry.getKey(), new java.util.concurrent.CopyOnWriteArrayList<>(resolvedTargetsForPort));
             }
-            resolvedTargets.put(sourceEntry.getKey(), Map.copyOf(resolvedByPort));
+            resolvedTargets.put(sourceEntry.getKey(), resolvedByPort);
         }
-        this.targetsByNodeAndPort = Map.copyOf(resolvedTargets);
+        this.targetsByNodeAndPort = resolvedTargets;
     }
 
     public CompiledFlow compiledFlow() {
@@ -85,6 +85,30 @@ public final class FlowRuntime {
         }
 
         return byPort.getOrDefault("default", List.of());
+    }
+
+    public void addRoute(String sourceNodeId, String sourcePort, NodeRuntime targetRuntime) {
+        targetsByNodeAndPort.computeIfAbsent(sourceNodeId, k -> new ConcurrentHashMap<>())
+            .compute(sourcePort, (port, list) -> {
+                List<NodeRuntime> newList = list == null 
+                    ? new java.util.concurrent.CopyOnWriteArrayList<>() 
+                    : new java.util.concurrent.CopyOnWriteArrayList<>(list);
+                if (!newList.contains(targetRuntime)) {
+                    newList.add(targetRuntime);
+                }
+                return newList;
+            });
+    }
+
+    public void removeRoute(String sourceNodeId, String sourcePort, String targetNodeId) {
+        ConcurrentMap<String, List<NodeRuntime>> byPort = targetsByNodeAndPort.get(sourceNodeId);
+        if (byPort != null) {
+            byPort.computeIfPresent(sourcePort, (port, list) -> {
+                List<NodeRuntime> newList = new java.util.concurrent.CopyOnWriteArrayList<>(list);
+                newList.removeIf(node -> node.compiledNode().id().equals(targetNodeId));
+                return newList;
+            });
+        }
     }
 
     public void refreshNodeRuntime(String nodeId) {

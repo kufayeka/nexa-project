@@ -67,10 +67,10 @@ public final class NexaStandaloneRunner {
                 outputConsumer);
 
         // 6. Deploy Rantai Topologi Node & Hidupkan Aliran Data
-        System.out.println("[standalone] Mentransformasikan graf biner dan mendesentralisasikan resource...");
-        runtime.deploy(workspaceDef);
         System.out.println("[standalone] Menghidupkan pipeline runtime Nexa Engine...");
         runtime.startRuntime();
+        System.out.println("[standalone] Mentransformasikan graf biner dan mendesentralisasikan resource...");
+        runtime.deploy(workspaceDef);
 
         // Di level produksi, set run.duration default ke 0 agar engine berjalan abadi
         // (indefinitely)
@@ -147,6 +147,7 @@ public final class NexaStandaloneRunner {
             }
 
             URLClassLoader classLoader = new URLClassLoader(urls, NexaStandaloneRunner.class.getClassLoader());
+            Thread.currentThread().setContextClassLoader(classLoader);
             ServiceLoader<NexaPlugin> serviceLoader = ServiceLoader.load(NexaPlugin.class, classLoader);
 
             for (NexaPlugin plugin : serviceLoader) {

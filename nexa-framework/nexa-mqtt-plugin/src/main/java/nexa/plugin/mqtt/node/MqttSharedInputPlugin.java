@@ -13,6 +13,7 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
     private MqttClient mqttClient;
     private String mqttClientPool;
     private String topic;
+    private String nodeId;
 
     @Override
     public String getPluginType() {
@@ -26,6 +27,7 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
 
     @Override
     public void onInit(final String targetId, final Map<String, Object> config, final NexaPluginContext context) throws Exception {
+        this.nodeId = targetId;
         this.mqttClientPool = (String) config.get("mqttClientPool");
         this.topic = (String) config.getOrDefault("topic", "sensor/data");
 
@@ -47,7 +49,13 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
         }
 
         // Jalankan subscription topik MQTT menggunakan client pool yang dipinjam
+        System.out.println("[MQTT Input Node] Subscribing node: " + nodeId 
+            + " to topic: " + this.topic 
+            + " | Connected: " + this.mqttClient.isConnected()
+            + " | ClientID: " + this.mqttClient.getClientId()
+            + " | ServerURI: " + this.mqttClient.getServerURI());
         this.mqttClient.subscribe(this.topic, (receivedTopic, mqttMessage) -> {
+            System.out.println("[MQTT Input Node] Received message on topic " + receivedTopic + " in node " + nodeId);
             RuntimeMessage nexaMsg = new RuntimeMessage();
             nexaMsg.writeValue("payload.rawData", new String(mqttMessage.getPayload()));
             nexaMsg.writeValue("payload.topic", receivedTopic);

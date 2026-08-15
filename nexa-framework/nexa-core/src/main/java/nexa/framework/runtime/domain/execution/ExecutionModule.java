@@ -19,13 +19,16 @@ public final class ExecutionModule {
 
     private final ExecutionService executionService;
     private final RuntimeExecutionService executionEngine;
+    private final ConcurrentMap<String, WorkspaceRuntime> workspaces;
 
     public ExecutionModule(
             RuntimeConfiguration configuration,
-            OutputConsumer outputConsumer) {
-        this.executionEngine = new RuntimeExecutionService(configuration, outputConsumer);
-        
-        ConcurrentMap<String, WorkspaceRuntime> workspaces = new ConcurrentHashMap<>();
+            OutputConsumer outputConsumer,
+            nexa.framework.runtime.domain.control.DefaultNodeController nodeController,
+            nexa.framework.runtime.domain.control.DefaultConnectionController connectionController,
+            nexa.framework.runtime.domain.control.DefaultNexaEventBus eventBus) {
+        this.executionEngine = new RuntimeExecutionService(configuration, outputConsumer, nodeController, connectionController, eventBus);
+        this.workspaces = new ConcurrentHashMap<>();
         AtomicBoolean runtimeStarted = new AtomicBoolean(false);
         
         this.executionService = new DefaultExecutionService(executionEngine, workspaces, runtimeStarted);
@@ -43,5 +46,12 @@ public final class ExecutionModule {
      */
     public RuntimeExecutionService executionEngine() {
         return executionEngine;
+    }
+
+    /**
+     * Mengembalikan peta workspace runtime aktif.
+     */
+    public ConcurrentMap<String, WorkspaceRuntime> workspaces() {
+        return workspaces;
     }
 }

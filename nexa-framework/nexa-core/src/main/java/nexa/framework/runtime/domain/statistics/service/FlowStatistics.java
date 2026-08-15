@@ -75,6 +75,16 @@ public final class FlowStatistics {
                 rejected.sum(),
                 averageMs);
     }
+
+    public void reset() {
+        running.reset();
+        waiting.reset();
+        failed.reset();
+        cancelled.reset();
+        completed.reset();
+        rejected.reset();
+        totalDurationNanos.reset();
+    }
 }
 
 

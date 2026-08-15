@@ -179,4 +179,37 @@ final class ExecutionLifecycleManager {
             return new ArrayList<>(futures);
         }
     }
+
+    void injectMessage(
+            WorkspaceRuntime workspaceRuntime,
+            FlowRuntime flowRuntime,
+            String sourceNodeId,
+            RuntimeMessage message) {
+        Instant createdAt = Instant.now();
+        Instant deadline = createdAt.plus(configuration.maxExecutionLifetime());
+
+        ExecutionContext context = new ExecutionContext(
+                workspaceRuntime.workspaceId(),
+                flowRuntime.compiledFlow().flowId(),
+                createdAt,
+                deadline);
+        flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, sourceNodeId));
+
+        flowRuntime.statistics().incrementRunning();
+        context.retainTask();
+
+        ScheduledFuture<?> timeoutTask = scheduler.schedule(
+                () -> cancelExecution(flowRuntime, context.executionId(), true),
+                configuration.maxExecutionLifetime().toMillis(),
+                TimeUnit.MILLISECONDS);
+        context.setTimeoutTask(timeoutTask);
+
+        executionService.nodeExecutor().submitNodeRoutes(
+                flowRuntime,
+                context.executionId(),
+                sourceNodeId,
+                DEFAULT_PORT,
+                message);
+        completeTask(flowRuntime, context.executionId());
+    }
 }

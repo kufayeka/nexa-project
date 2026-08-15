@@ -34,13 +34,16 @@ public final class RuntimeExecutionService {
 
     public RuntimeExecutionService(
             RuntimeConfiguration configuration,
-            OutputConsumer outputConsumer) {
+            OutputConsumer outputConsumer,
+            nexa.framework.runtime.domain.control.DefaultNodeController nodeController,
+            nexa.framework.runtime.domain.control.DefaultConnectionController connectionController,
+            nexa.framework.runtime.domain.control.DefaultNexaEventBus eventBus) {
         this.configuration = configuration;
         this.scheduler = Executors.newScheduledThreadPool(2,
                 Thread.ofPlatform().daemon(true).name("nexa-scheduler-", 0).factory());
         this.workerExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nexa-worker-", 0).factory());
 
-        this.nodeExecutor = new NodeExecutor(outputConsumer, workerExecutor, this);
+        this.nodeExecutor = new NodeExecutor(outputConsumer, workerExecutor, this, nodeController, connectionController, eventBus);
         this.lifecycleManager = new ExecutionLifecycleManager(configuration, scheduler, this);
     }
 
@@ -183,5 +186,9 @@ public final class RuntimeExecutionService {
                     "Flow " + flowId + " not found in workspace " + workspaceRuntime.workspaceId());
         }
         return flowRuntime;
+    }
+
+    public void injectMessage(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, String sourceNodeId, RuntimeMessage message) {
+        lifecycleManager.injectMessage(workspaceRuntime, flowRuntime, sourceNodeId, message);
     }
 }

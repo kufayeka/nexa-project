@@ -22,6 +22,18 @@ import nexa.framework.runtime.domain.execution.api.ExecutionService;
 import nexa.framework.runtime.domain.scheduler.SchedulerModule;
 import nexa.framework.runtime.domain.statistics.StatisticsModule;
 import nexa.framework.runtime.domain.statistics.model.RuntimeStatisticsSnapshot;
+import nexa.framework.runtime.api.control.events.NexaEventBus;
+import nexa.framework.runtime.api.control.NexaControlContext;
+import nexa.framework.runtime.api.control.NexaControlService;
+import nexa.framework.runtime.domain.control.DefaultNodeController;
+import nexa.framework.runtime.domain.control.DefaultNexaEventBus;
+import nexa.framework.runtime.domain.control.DefaultWorkspaceController;
+import nexa.framework.runtime.domain.control.DefaultConnectionController;
+import nexa.framework.runtime.domain.control.DefaultRuntimeController;
+import nexa.framework.runtime.domain.control.DefaultNexaControlContext;
+import nexa.framework.runtime.domain.execution.model.WorkspaceRuntime;
+import nexa.framework.runtime.domain.execution.model.FlowRuntime;
+import java.util.ServiceLoader;
 
 import java.util.Objects;
 import java.util.List;
@@ -57,9 +69,29 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
     private final ConcurrentHashMap<String, List<String>> workspaceNodeIds = new ConcurrentHashMap<>();
     private final NexaPluginContext pluginContext;
 
+    private final DefaultNexaEventBus eventBus;
+    private final DefaultNodeController nodeController;
+    private final DefaultWorkspaceController workspaceController;
+    private final DefaultConnectionController connectionController;
+    private final DefaultRuntimeController runtimeController;
+    private final DefaultNexaControlContext controlContext;
+
     public DefaultRuntimeEngine(RuntimeConfiguration configuration, OutputConsumer outputConsumer) {
         Objects.requireNonNull(configuration, "configuration must not be null");
         Objects.requireNonNull(outputConsumer, "outputConsumer must not be null");
+
+        this.eventBus = new DefaultNexaEventBus();
+        this.nodeController = new DefaultNodeController();
+        this.connectionController = new DefaultConnectionController(this);
+        this.workspaceController = new DefaultWorkspaceController(this);
+        this.runtimeController = new DefaultRuntimeController(this);
+        this.controlContext = new DefaultNexaControlContext(
+                workspaceController,
+                nodeController,
+                connectionController,
+                runtimeController,
+                eventBus
+        );
 
         // 1. Perakitan Modul Daun / Tanpa dependensi domain lain
         this.workspaceModule = new WorkspaceModule();
@@ -68,7 +100,7 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
         // 2. Perakitan Modul dengan Constructor Dependency Injection
         this.deploymentModule = new DeploymentModule(scriptingModule.scriptEngineRegistry());
-        this.executionModule = new ExecutionModule(configuration, outputConsumer);
+        this.executionModule = new ExecutionModule(configuration, outputConsumer, nodeController, connectionController, eventBus);
         
         // 3. Perakitan Scheduler Module (memerlukan ExecutionService untuk eksekusi input)
         this.executionService = executionModule.executionService();
@@ -88,17 +120,24 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
             @Override
             public boolean validateScript(String language, String script, Map<String, Object> errorContainer) {
-                var engine = scriptingModule.scriptEngineRegistry().find(language);
-                if (engine != null && engine.compiler() != null) {
-                    return engine.compiler().validate(script, errorContainer);
-                }
-                return false;
+                return DefaultRuntimeEngine.this.validateScript(language, script, errorContainer);
             }
         };
     }
 
     @Override
     public void startRuntime() {
+        // Start control services via SPI ServiceLoader first so embedded brokers/APIs are available
+        for (NexaControlService service : ServiceLoader.load(NexaControlService.class)) {
+            try {
+                service.start(controlContext);
+                System.out.println("[CONTROL SERVICE] Started control service: " + service.getClass().getName());
+            } catch (Exception e) {
+                System.err.println("[CONTROL SERVICE ERROR] Failed to start control service: " + service.getClass().getName());
+                e.printStackTrace();
+            }
+        }
+
         // Jalankan .onStart() untuk setiap resource plugin eksternal
         workspaceResourceIds.values().forEach(resIds -> {
             for (String resId : resIds) {
@@ -134,6 +173,17 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
     @Override
     public void stopRuntime() {
+        // Stop control services first
+        for (NexaControlService service : ServiceLoader.load(NexaControlService.class)) {
+            try {
+                service.stop();
+                System.out.println("[CONTROL SERVICE] Stopped control service: " + service.getClass().getName());
+            } catch (Exception e) {
+                System.err.println("[CONTROL SERVICE ERROR] Failed to stop control service: " + service.getClass().getName());
+                e.printStackTrace();
+            }
+        }
+
         executionService.stopRuntime();
 
         // Hentikan setiap node plugin eksternal
@@ -147,6 +197,32 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
         globalResourceRegistry.clearAll();
         workspaceResourceIds.clear();
         workspaceNodeIds.clear();
+    }
+
+    public java.util.concurrent.ConcurrentMap<String, WorkspaceRuntime> getWorkspaceRuntimes() {
+        return executionModule.workspaces();
+    }
+
+    public DefaultNodeController getNodeController() {
+        return nodeController;
+    }
+
+    public boolean validateScript(String language, String script, Map<String, Object> errorContainer) {
+        var engine = scriptingModule.scriptEngineRegistry().find(language);
+        if (engine != null && engine.compiler() != null) {
+            return engine.compiler().validate(script, errorContainer);
+        }
+        return false;
+    }
+
+    public void injectMessage(String workspaceId, String flowId, String sourceNodeId, RuntimeMessage message) {
+        WorkspaceRuntime wr = executionModule.workspaces().get(workspaceId);
+        if (wr != null) {
+            FlowRuntime flow = wr.flowsById().get(flowId);
+            if (flow != null) {
+                executionModule.executionEngine().injectMessage(wr, flow, sourceNodeId, message);
+            }
+        }
     }
 
     @Override
@@ -212,6 +288,20 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
         }
         if (!nodeIds.isEmpty()) {
             workspaceNodeIds.put(workspaceId, nodeIds);
+            if (executionService.isRuntimeStarted()) {
+                for (String nodeId : nodeIds) {
+                    NexaPlugin instance = PluginRegistry.getInstance(nodeId);
+                    if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
+                        try {
+                            lifecycle.onStart();
+                            System.out.println("[PLUGIN START] Started node plugin dynamically: " + nodeId);
+                        } catch (Exception e) {
+                            System.err.println("[PLUGIN START ERROR] Gagal menjalankan onStart untuk node: " + nodeId);
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
         }
 
         // Compile menggunakan Deployment domain, kemudian pasang di Execution domain
@@ -255,6 +345,7 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
     @Override
     public void trigger(String workspaceId, String flowId, String inputNodeId, RuntimeMessage message) {
+        System.out.println("[ENGINE TRIGGER] Triggering workspace: " + workspaceId + " flow: " + flowId + " node: " + inputNodeId);
         executionService.trigger(workspaceId, flowId, inputNodeId, message);
     }
 
