@@ -6,57 +6,70 @@ import nexa.framework.runtime.api.model.RuntimeMessage;
 import nexa.framework.runtime.domain.execution.service.DefaultRuntimeEngine;
 import nexa.framework.runtime.domain.execution.model.WorkspaceRuntime;
 import nexa.framework.runtime.domain.execution.model.FlowRuntime;
-import nexa.framework.runtime.domain.execution.model.NodeRuntime;
+import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
 
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class DefaultConnectionController implements ConnectionControl {
+public final class DefaultConnectionController implements ConnectionControl {
     private final DefaultRuntimeEngine engine;
-    private final Set<String> disabledConnections = ConcurrentHashMap.newKeySet();
     private final Map<String, Long> messageCounters = new ConcurrentHashMap<>();
 
-    public DefaultConnectionController(DefaultRuntimeEngine engine) {
-        this.engine = engine;
-    }
+    public DefaultConnectionController(DefaultRuntimeEngine engine) { this.engine = engine; }
 
-    public boolean isConnectionDisabled(String sourceNodeId) {
-        return disabledConnections.contains(sourceNodeId);
-    }
+    @Override
+    public void enableConnection(String connectionId) { setConnectionEnabled(connectionId, true); }
 
-    public void incrementMessageCount(String sourceNodeId) {
-        messageCounters.merge(sourceNodeId, 1L, Long::sum);
+    @Override
+    public void disableConnection(String connectionId) { setConnectionEnabled(connectionId, false); }
+
+    private void setConnectionEnabled(String connectionId, boolean enabled) {
+        validateId(connectionId);
+        for (WorkspaceRuntime workspace : engine.getWorkspaceRuntimes().values()) {
+            for (FlowRuntime flow : workspace.flowsById().values()) {
+                if (flow.compiledFlow().connection(connectionId) == null) continue;
+                flow.compiledFlow().setConnectionEnabled(connectionId, enabled);
+                flow.refreshRoutes();
+                return;
+            }
+        }
+        throw new IllegalArgumentException("Connection not found: " + connectionId);
     }
 
     @Override
-    public void enableConnection(String sourceNodeId) {
-        disabledConnections.remove(sourceNodeId);
-    }
-
-    @Override
-    public void disableConnection(String sourceNodeId) {
-        disabledConnections.add(sourceNodeId);
-    }
-
-    @Override
-    public ConnectionInfo getConnectionInfo(String sourceNodeId) {
-        return new ConnectionInfo(
-                sourceNodeId,
-                "default",
-                !disabledConnections.contains(sourceNodeId),
-                messageCounters.getOrDefault(sourceNodeId, 0L));
-    }
-
-    @Override
-    public void injectMessageIntoConnection(String sourceNodeId, RuntimeMessage message) {
-        var workspaces = engine.getWorkspaceRuntimes();
-        for (WorkspaceRuntime wr : workspaces.values()) {
-            for (FlowRuntime flow : wr.flowsById().values()) {
-                if (flow.nodeRuntime(sourceNodeId) != null) {
-                    engine.injectMessage(wr.workspaceId(), flow.compiledFlow().flowId(), sourceNodeId, message);
-                    return;
+    public ConnectionInfo getConnectionInfo(String connectionId) {
+        validateId(connectionId);
+        for (WorkspaceRuntime workspace : engine.getWorkspaceRuntimes().values()) {
+            for (FlowRuntime flow : workspace.flowsById().values()) {
+                CompiledConnection connection = flow.compiledFlow().connection(connectionId);
+                if (connection != null) {
+                    return new ConnectionInfo(connection.sourceNodeId(), connection.targetNodeId(),
+                            connection.enabled(), messageCounters.getOrDefault(connectionId, 0L));
                 }
             }
+        }
+        throw new IllegalArgumentException("Connection not found: " + connectionId);
+    }
+
+    @Override
+    public void injectMessageIntoConnection(String connectionId, RuntimeMessage message) {
+        validateId(connectionId);
+        for (WorkspaceRuntime workspace : engine.getWorkspaceRuntimes().values()) {
+            for (FlowRuntime flow : workspace.flowsById().values()) {
+                CompiledConnection connection = flow.compiledFlow().connection(connectionId);
+                if (connection == null) continue;
+                if (!workspace.enabled() || !flow.compiledFlow().enabled() || !connection.enabled()) return;
+                messageCounters.merge(connectionId, 1L, Long::sum);
+                engine.injectMessageIntoConnection(workspace, flow, connection, message);
+                return;
+            }
+        }
+        throw new IllegalArgumentException("Connection not found: " + connectionId);
+    }
+
+    private static void validateId(String connectionId) {
+        if (connectionId == null || connectionId.isBlank()) {
+            throw new IllegalArgumentException("connectionId must not be blank");
         }
     }
 }
