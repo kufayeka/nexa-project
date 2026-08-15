@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public final class StressWorkspaceGenerator {
 
@@ -40,7 +41,8 @@ public final class StressWorkspaceGenerator {
                                 new InputExecutionPolicyDefinition(null),
                                 Map.of("script", fanoutScript)));
 
-                connections.add(new ConnectionDefinition("input-manual", "default", "exec-fanout"));
+                connections.add(new ConnectionDefinition(
+                                UUID.randomUUID().toString(), "input-manual", "default", "exec-fanout"));
 
                 for (int index = 0; index < branches; index++) {
                         String port = "p" + index;
@@ -70,8 +72,10 @@ public final class StressWorkspaceGenerator {
                                         new InputExecutionPolicyDefinition(null),
                                         Map.of()));
 
-                        connections.add(new ConnectionDefinition("exec-fanout", port, execId));
-                        connections.add(new ConnectionDefinition(execId, "default", outId));
+                        connections.add(new ConnectionDefinition(
+                                        UUID.randomUUID().toString(), "exec-fanout", port, execId));
+                        connections.add(new ConnectionDefinition(
+                                        UUID.randomUUID().toString(), execId, "default", outId));
                 }
 
                 FlowDefinition flow = new FlowDefinition(flowId, flowId, true, nodes, connections);
@@ -112,8 +116,10 @@ public final class StressWorkspaceGenerator {
                                                 Map.of()));
 
                 List<ConnectionDefinition> connections = List.of(
-                                new ConnectionDefinition("input-timed", "default", "exec-main"),
-                                new ConnectionDefinition("exec-main", "default", "out-main"));
+                                new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), "input-timed", "default", "exec-main"),
+                                new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), "exec-main", "default", "out-main"));
 
                 FlowDefinition flow = new FlowDefinition(flowId, flowId, true, nodes, connections);
                 return new WorkspaceDefinition(workspaceId, true, List.of(flow));
@@ -164,8 +170,10 @@ public final class StressWorkspaceGenerator {
                                                 Map.of()));
 
                 List<ConnectionDefinition> connections = List.of(
-                                new ConnectionDefinition(inputId, "default", execId),
-                                new ConnectionDefinition(execId, "default", outId));
+                                new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), inputId, "default", execId),
+                                new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), execId, "default", outId));
 
                 return new FlowDefinition(flowId, flowId, true, nodes, connections);
         }
@@ -185,4 +193,3 @@ public final class StressWorkspaceGenerator {
                 return builder.toString();
         }
 }
-

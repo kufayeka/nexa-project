@@ -25,7 +25,8 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
         com.fasterxml.jackson.databind.module.SimpleModule module = new com.fasterxml.jackson.databind.module.SimpleModule();
         module.addSerializer(RuntimeMessage.class, new com.fasterxml.jackson.databind.JsonSerializer<RuntimeMessage>() {
             @Override
-            public void serialize(RuntimeMessage value, com.fasterxml.jackson.core.JsonGenerator gen, com.fasterxml.jackson.databind.SerializerProvider serializers) throws java.io.IOException {
+            public void serialize(RuntimeMessage value, com.fasterxml.jackson.core.JsonGenerator gen,
+                    com.fasterxml.jackson.databind.SerializerProvider serializers) throws java.io.IOException {
                 gen.writeObject(value.values());
             }
         });
@@ -181,37 +182,41 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
 
         // --- Connection Control ---
         app.post("/api/connection/enable", ctx -> {
-            String src = ctx.queryParam("source");
-            context.getConnectionControl().enableConnection(src);
-            ctx.status(200).result("Connection enabled");
+            String connectionId = ctx.queryParam("connectionId");
+            context.getConnectionControl().enableConnection(connectionId);
+            ctx.status(200).result("Connection enabled: " + connectionId);
         });
 
         app.post("/api/connection/disable", ctx -> {
-            String src = ctx.queryParam("source");
-            context.getConnectionControl().disableConnection(src);
-            ctx.status(200).result("Connection disabled");
+            String connectionId = ctx.queryParam("connectionId");
+            context.getConnectionControl().disableConnection(connectionId);
+            ctx.status(200).result("Connection disabled: " + connectionId);
         });
 
         app.post("/api/connection/inject", ctx -> {
-            String source = ctx.queryParam("source");
+            String connectionId = ctx.queryParam("connectionId");
             RuntimeMessage msg = mapper.readValue(ctx.body(), RuntimeMessage.class);
-            context.getConnectionControl().injectMessageIntoConnection(source, msg);
-            ctx.status(200).result("Message injected into connection: " + source);
+
+            context.getConnectionControl().injectMessageIntoConnection(connectionId, msg);
+
+            ctx.status(200).result("Message injected into connection: " + connectionId);
         });
 
-        app.post("/api/connection/add", ctx -> {
-            String source = ctx.queryParam("source");
-            String target = ctx.queryParam("target");
-            context.getConnectionControl().addConnection(source, target);
-            ctx.status(200).result("Connection added: " + source + " -> " + target);
-        });
+        // UNsED!
+        // app.post("/api/connection/add", ctx -> {
+        // String source = ctx.queryParam("source");
+        // String target = ctx.queryParam("target");
+        // context.getConnectionControl().addConnection(source, target);
+        // ctx.status(200).result("Connection added: " + source + " -> " + target);
+        // });
 
-        app.post("/api/connection/remove", ctx -> {
-            String source = ctx.queryParam("source");
-            String target = ctx.queryParam("target");
-            context.getConnectionControl().removeConnection(source, target);
-            ctx.status(200).result("Connection removed: " + source + " -> " + target);
-        });
+        // UNsED!
+        // app.post("/api/connection/remove", ctx -> {
+        // String connectionId = ctx.queryParam("connectionId");
+        // context.getConnectionControl().removeConnection(connectionId);
+        // ctx.status(200).result(
+        // "Connection removed: " + connectionId);
+        // });
 
         // --- Runtime Control & Monitoring ---
         app.get("/api/runtime/status", ctx -> {

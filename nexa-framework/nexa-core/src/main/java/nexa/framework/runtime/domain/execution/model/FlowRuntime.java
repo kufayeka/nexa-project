@@ -46,7 +46,8 @@ public final class FlowRuntime {
                     }
                     resolvedTargetsForPort.add(targetRuntime);
                 }
-                resolvedByPort.put(portEntry.getKey(), new java.util.concurrent.CopyOnWriteArrayList<>(resolvedTargetsForPort));
+                resolvedByPort.put(portEntry.getKey(),
+                        new java.util.concurrent.CopyOnWriteArrayList<>(resolvedTargetsForPort));
             }
             resolvedTargets.put(sourceEntry.getKey(), resolvedByPort);
         }
@@ -89,15 +90,15 @@ public final class FlowRuntime {
 
     public void addRoute(String sourceNodeId, String sourcePort, NodeRuntime targetRuntime) {
         targetsByNodeAndPort.computeIfAbsent(sourceNodeId, k -> new ConcurrentHashMap<>())
-            .compute(sourcePort, (port, list) -> {
-                List<NodeRuntime> newList = list == null 
-                    ? new java.util.concurrent.CopyOnWriteArrayList<>() 
-                    : new java.util.concurrent.CopyOnWriteArrayList<>(list);
-                if (!newList.contains(targetRuntime)) {
-                    newList.add(targetRuntime);
-                }
-                return newList;
-            });
+                .compute(sourcePort, (port, list) -> {
+                    List<NodeRuntime> newList = list == null
+                            ? new java.util.concurrent.CopyOnWriteArrayList<>()
+                            : new java.util.concurrent.CopyOnWriteArrayList<>(list);
+                    if (!newList.contains(targetRuntime)) {
+                        newList.add(targetRuntime);
+                    }
+                    return newList;
+                });
     }
 
     public void removeRoute(String sourceNodeId, String sourcePort, String targetNodeId) {
@@ -111,6 +112,21 @@ public final class FlowRuntime {
         }
     }
 
+    public boolean removeConnection(String connectionId) {
+        var connection = compiledFlow.connection(connectionId);
+
+        if (connection == null) {
+            return false;
+        }
+
+        removeRoute(
+                connection.sourceNodeId(),
+                connection.sourcePort(),
+                connection.targetNodeId());
+
+        return true;
+    }
+
     public void refreshNodeRuntime(String nodeId) {
         CompiledNode updatedNode = compiledFlow.node(nodeId);
         NodeRuntime nodeRuntime = nodeRuntimeById.get(nodeId);
@@ -120,5 +136,3 @@ public final class FlowRuntime {
         nodeRuntime.setCompiledNode(updatedNode);
     }
 }
-
-

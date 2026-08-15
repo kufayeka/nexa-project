@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -89,8 +90,11 @@ public final class PluginPlatformIntegrationTest {
                 Map.of());
 
         List<ConnectionDefinition> connections = List.of(
-                new ConnectionDefinition("node-source", "default", "node-function"),
-                new ConnectionDefinition("node-function", "default", "node-sink"));
+                new ConnectionDefinition(
+                        UUID.randomUUID().toString(), "node-source", "default", "node-function"),
+
+                new ConnectionDefinition(
+                        UUID.randomUUID().toString(), "node-function", "default", "node-sink"));
 
         FlowDefinition flow = new FlowDefinition("flow-1", "flow-1", true, List.of(sourceNode, functionNode, sinkNode),
                 connections);

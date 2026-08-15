@@ -1,6 +1,7 @@
 package nexa.framework.runtime.domain.deployment.service;
 
 import nexa.framework.runtime.domain.deployment.model.CompiledWorkspace;
+import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
 import nexa.framework.runtime.domain.deployment.model.CompiledFlow;
 import nexa.framework.runtime.domain.deployment.model.CompiledNode;
 
@@ -126,23 +127,62 @@ public final class FlowCompiler {
         }
 
         Map<String, Map<String, List<String>>> routes = new LinkedHashMap<>();
+        Map<String, CompiledConnection> connectionById = new LinkedHashMap<>();
+
         for (NodeDefinition nodeDefinition : definition.nodes()) {
             routes.put(nodeDefinition.id(), new LinkedHashMap<>());
         }
 
         for (ConnectionDefinition connection : definition.connections()) {
+
+            // Simpan metadata connection lengkap berdasarkan ID workspace
+            if (connectionById.containsKey(connection.id())) {
+                throw new ValidationException(
+                        "Duplicate connection id " + connection.id()
+                                + " in flow " + definition.id());
+            }
+
+            connectionById.put(
+                    connection.id(),
+                    new CompiledConnection(
+                            connection.id(),
+                            connection.sourceNodeId(),
+                            connection.sourcePort(),
+                            connection.targetNodeId()));
+
+            // Tetap buat routing lama agar execution engine yang sekarang tetap bekerja
             Map<String, List<String>> byPort = routes.get(connection.sourceNodeId());
-            List<String> targets = byPort.computeIfAbsent(connection.sourcePort(), ignored -> new ArrayList<>());
+
+            if (byPort == null) {
+                throw new ValidationException(
+                        "Connection " + connection.id()
+                                + " references unknown source node "
+                                + connection.sourceNodeId());
+            }
+
+            List<String> targets = byPort.computeIfAbsent(
+                    connection.sourcePort(),
+                    ignored -> new ArrayList<>());
+
             targets.add(connection.targetNodeId());
         }
 
         Map<String, Map<String, List<String>>> immutableRoutes = new LinkedHashMap<>();
+
         for (Map.Entry<String, Map<String, List<String>>> entry : routes.entrySet()) {
+
             Map<String, List<String>> immutableByPort = new LinkedHashMap<>();
+
             for (Map.Entry<String, List<String>> byPortEntry : entry.getValue().entrySet()) {
-                immutableByPort.put(byPortEntry.getKey(), List.copyOf(byPortEntry.getValue()));
+
+                immutableByPort.put(
+                        byPortEntry.getKey(),
+                        List.copyOf(byPortEntry.getValue()));
             }
-            immutableRoutes.put(entry.getKey(), Map.copyOf(immutableByPort));
+
+            immutableRoutes.put(
+                    entry.getKey(),
+                    Map.copyOf(immutableByPort));
         }
 
         return new CompiledFlow(
@@ -150,7 +190,8 @@ public final class FlowCompiler {
                 definition.name(),
                 definition.enabled(),
                 nodeById,
-                immutableRoutes);
+                immutableRoutes,
+                connectionById);
     }
 
     public void invalidateWorkspaceScripts(String workspaceId) {
@@ -181,6 +222,7 @@ public final class FlowCompiler {
 
     private String flowSignature(FlowDefinition flowDefinition) {
         StringBuilder builder = new StringBuilder();
+
         builder.append(flowDefinition.id()).append('|');
         builder.append(flowDefinition.name()).append('|');
         builder.append(flowDefinition.enabled()).append('|');
@@ -199,6 +241,7 @@ public final class FlowCompiler {
 
         for (ConnectionDefinition connection : flowDefinition.connections()) {
             builder.append("c:");
+            builder.append(connection.id()).append('|');
             builder.append(connection.sourceNodeId()).append('|');
             builder.append(connection.sourcePort()).append('|');
             builder.append(connection.targetNodeId()).append('|');

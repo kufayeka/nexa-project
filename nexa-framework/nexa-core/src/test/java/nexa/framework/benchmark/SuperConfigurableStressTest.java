@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -235,7 +236,8 @@ public final class SuperConfigurableStressTest {
                     new InputExecutionPolicyDefinition(null),
                     Map.of("script", fanoutScript)));
 
-            connections.add(new ConnectionDefinition("input-manual", "default", "exec-router"));
+            connections.add(new ConnectionDefinition(
+                    UUID.randomUUID().toString(), "input-manual", "default", "exec-router"));
 
             // 3. Cabang Fan-out (masing-masing mengeksekusi Nexa script kompleks)
             for (int f = 0; f < fanoutDegree; f++) {
@@ -261,8 +263,10 @@ public final class SuperConfigurableStressTest {
                         new InputExecutionPolicyDefinition(null),
                         Map.of()));
 
-                connections.add(new ConnectionDefinition("exec-router", port, execId));
-                connections.add(new ConnectionDefinition(execId, "default", outId));
+                connections.add(new ConnectionDefinition(
+                        UUID.randomUUID().toString(), "exec-router", port, execId));
+                connections.add(new ConnectionDefinition(
+                        UUID.randomUUID().toString(), execId, "default", outId));
             }
 
             flows.add(new FlowDefinition(flowId, flowId, true, nodes, connections));

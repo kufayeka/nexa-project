@@ -44,8 +44,7 @@ public class DefaultConnectionController implements ConnectionControl {
                 sourceNodeId,
                 "default",
                 !disabledConnections.contains(sourceNodeId),
-                messageCounters.getOrDefault(sourceNodeId, 0L)
-        );
+                messageCounters.getOrDefault(sourceNodeId, 0L));
     }
 
     @Override
@@ -55,35 +54,6 @@ public class DefaultConnectionController implements ConnectionControl {
             for (FlowRuntime flow : wr.flowsById().values()) {
                 if (flow.nodeRuntime(sourceNodeId) != null) {
                     engine.injectMessage(wr.workspaceId(), flow.compiledFlow().flowId(), sourceNodeId, message);
-                    return;
-                }
-            }
-        }
-    }
-
-    @Override
-    public void addConnection(String sourceNodeId, String targetNodeId) {
-        var workspaces = engine.getWorkspaceRuntimes();
-        for (WorkspaceRuntime wr : workspaces.values()) {
-            for (FlowRuntime flow : wr.flowsById().values()) {
-                if (flow.nodeRuntime(sourceNodeId) != null) {
-                    NodeRuntime targetNode = flow.nodeRuntime(targetNodeId);
-                    if (targetNode != null) {
-                        flow.addRoute(sourceNodeId, "default", targetNode);
-                    }
-                    return;
-                }
-            }
-        }
-    }
-
-    @Override
-    public void removeConnection(String sourceNodeId, String targetNodeId) {
-        var workspaces = engine.getWorkspaceRuntimes();
-        for (WorkspaceRuntime wr : workspaces.values()) {
-            for (FlowRuntime flow : wr.flowsById().values()) {
-                if (flow.nodeRuntime(sourceNodeId) != null) {
-                    flow.removeRoute(sourceNodeId, "default", targetNodeId);
                     return;
                 }
             }

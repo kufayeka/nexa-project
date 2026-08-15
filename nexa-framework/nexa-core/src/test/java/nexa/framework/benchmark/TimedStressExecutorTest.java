@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -224,7 +225,8 @@ public final class TimedStressExecutorTest {
                                         Map.of("script", fanoutScript)));
 
                         // Hubungkan input ke router
-                        connections.add(new ConnectionDefinition(inputId, "default", routerId));
+                        connections.add(new ConnectionDefinition(
+                                        UUID.randomUUID().toString(), inputId, "default", routerId));
 
                         // Buat cabang fan-out paralel untuk router ini
                         for (int f = 0; f < fanoutDegree; f++) {
@@ -255,9 +257,13 @@ public final class TimedStressExecutorTest {
                                                                                 "send(\"default\", msg)")));
 
                                 // Hubungkan router -> Stage 1 -> Stage 2 -> Fan-in debug output
-                                connections.add(new ConnectionDefinition(routerId, port, execId));
-                                connections.add(new ConnectionDefinition(execId, "default", secondStageExecId));
-                                connections.add(new ConnectionDefinition(secondStageExecId, "default", finalOutId));
+                                connections.add(new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), routerId, port, execId));
+                                connections.add(new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), execId, "default", secondStageExecId));
+                                connections.add(new ConnectionDefinition(
+                                                UUID.randomUUID().toString(), secondStageExecId, "default",
+                                                finalOutId));
                         }
                 }
 

@@ -19,25 +19,22 @@ public final class MqttSharedSinkPlugin implements NexaSinkPlugin {
     }
 
     @Override
-    public void onInit(final String targetId, final Map<String, Object> config, final NexaPluginContext context) throws Exception {
+    public void onInit(final String targetId, final Map<String, Object> config, final NexaPluginContext context)
+            throws Exception {
         this.mqttClientPool = (String) config.get("mqttClientPool");
-        this.topic = (String) config.getOrDefault("topic", "sensor/processed");
-
-        // Alur Kerja Resolusi Client:
-        // 1. Coba cari client dari NexaPluginContext menggunakan ID resource
-        Object clientObj = context.getSharedResource(this.mqttClientPool);
-        if (clientObj instanceof MqttClient client) {
-            this.mqttClient = client;
-        } else {
-            // 2. Jika tidak ditemukan (misal di-refer menggunakan nama pool), cari dari registry lokal
-            this.mqttClient = MqttBrokerManager.getClientByNameOrId(this.mqttClientPool);
-        }
+        this.topic = (String) config.getOrDefault(
+                "topic",
+                "sensor/processed");
     }
 
     @Override
     public void onStart() throws Exception {
+        this.mqttClient = MqttBrokerManager.getClientByNameOrId(this.mqttClientPool);
+
         if (this.mqttClient == null) {
-            throw new IllegalStateException("Mqtt Client Pool tidak ditemukan atau belum terinisialisasi: " + this.mqttClientPool);
+            throw new IllegalStateException(
+                    "Mqtt Client Pool tidak ditemukan atau belum terinisialisasi: "
+                            + this.mqttClientPool);
         }
     }
 
@@ -45,17 +42,19 @@ public final class MqttSharedSinkPlugin implements NexaSinkPlugin {
     public void consume(RuntimeMessage msg) {
         try {
             Object rawPayload = msg.readRawValue("payload");
-            if (rawPayload == null) return;
+            if (rawPayload == null)
+                return;
 
             MqttMessage mqttMessage = new MqttMessage(rawPayload.toString().getBytes());
             mqttMessage.setQos(1);
-            
+
             // Only publish if client is active and connected
             if (this.mqttClient != null && this.mqttClient.isConnected()) {
                 this.mqttClient.publish(this.topic, mqttMessage);
             }
         } catch (Exception e) {
-            // Suppress printing errors if the client got disconnected/closed during shutdown
+            // Suppress printing errors if the client got disconnected/closed during
+            // shutdown
             if (this.mqttClient != null && this.mqttClient.isConnected()) {
                 System.err.println("[MQTT Sink Error] Gagal mempublikasikan data: " + e.getMessage());
             }
@@ -63,5 +62,6 @@ public final class MqttSharedSinkPlugin implements NexaSinkPlugin {
     }
 
     @Override
-    public void onStop() {}
+    public void onStop() {
+    }
 }

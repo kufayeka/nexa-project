@@ -42,16 +42,22 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * DefaultRuntimeEngine adalah Composition Root utama yang menyambungkan (wiring)
- * semua Modul Domain (Workspace, Scripting, Deployment, Execution, Scheduler, Statistics)
+ * DefaultRuntimeEngine adalah Composition Root utama yang menyambungkan
+ * (wiring)
+ * semua Modul Domain (Workspace, Scripting, Deployment, Execution, Scheduler,
+ * Statistics)
  * secara eksplisit tanpa framework DI eksternal (Pure DI).
  * 
  * Alur Kerja Perakitan (Wiring Flow):
- * 1. Instansiasi modul daun (WorkspaceModule, ScriptingModule, StatisticsModule)
- * 2. Instansiasi modul Deployment (memerlukan ScriptEngineRegistry dari ScriptingModule)
+ * 1. Instansiasi modul daun (WorkspaceModule, ScriptingModule,
+ * StatisticsModule)
+ * 2. Instansiasi modul Deployment (memerlukan ScriptEngineRegistry dari
+ * ScriptingModule)
  * 3. Instansiasi modul Execution (memerlukan konfigurasi global)
- * 4. Instansiasi modul Scheduler (memerlukan ExecutionService untuk men-trigger input)
- * 5. Hubungkan Scheduler inputActivator ke Execution engine untuk memutus siklus dependensi (DIP)
+ * 4. Instansiasi modul Scheduler (memerlukan ExecutionService untuk men-trigger
+ * input)
+ * 5. Hubungkan Scheduler inputActivator ke Execution engine untuk memutus
+ * siklus dependensi (DIP)
  */
 public final class DefaultRuntimeEngine implements RuntimeEngine {
 
@@ -90,8 +96,7 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
                 nodeController,
                 connectionController,
                 runtimeController,
-                eventBus
-        );
+                eventBus);
 
         // 1. Perakitan Modul Daun / Tanpa dependensi domain lain
         this.workspaceModule = new WorkspaceModule();
@@ -100,13 +105,16 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
         // 2. Perakitan Modul dengan Constructor Dependency Injection
         this.deploymentModule = new DeploymentModule(scriptingModule.scriptEngineRegistry());
-        this.executionModule = new ExecutionModule(configuration, outputConsumer, nodeController, connectionController, eventBus);
-        
-        // 3. Perakitan Scheduler Module (memerlukan ExecutionService untuk eksekusi input)
+        this.executionModule = new ExecutionModule(configuration, outputConsumer, nodeController, connectionController,
+                eventBus);
+
+        // 3. Perakitan Scheduler Module (memerlukan ExecutionService untuk eksekusi
+        // input)
         this.executionService = executionModule.executionService();
         this.schedulerModule = new SchedulerModule(executionService, executionModule.executionEngine().scheduler());
 
-        // 4. Inversi Dependensi (DIP) untuk memutus hubungan melingkar (cyclic dependency)
+        // 4. Inversi Dependensi (DIP) untuk memutus hubungan melingkar (cyclic
+        // dependency)
         // Scheduler menyediakan inputActivator untuk dipasang di Execution engine
         this.executionModule.executionEngine().setInputActivator(schedulerModule.inputActivator());
 
@@ -127,13 +135,15 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
     @Override
     public void startRuntime() {
-        // Start control services via SPI ServiceLoader first so embedded brokers/APIs are available
+        // Start control services via SPI ServiceLoader first so embedded brokers/APIs
+        // are available
         for (NexaControlService service : ServiceLoader.load(NexaControlService.class)) {
             try {
                 service.start(controlContext);
                 System.out.println("[CONTROL SERVICE] Started control service: " + service.getClass().getName());
             } catch (Exception e) {
-                System.err.println("[CONTROL SERVICE ERROR] Failed to start control service: " + service.getClass().getName());
+                System.err.println(
+                        "[CONTROL SERVICE ERROR] Failed to start control service: " + service.getClass().getName());
                 e.printStackTrace();
             }
         }
@@ -179,7 +189,8 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
                 service.stop();
                 System.out.println("[CONTROL SERVICE] Stopped control service: " + service.getClass().getName());
             } catch (Exception e) {
-                System.err.println("[CONTROL SERVICE ERROR] Failed to stop control service: " + service.getClass().getName());
+                System.err.println(
+                        "[CONTROL SERVICE ERROR] Failed to stop control service: " + service.getClass().getName());
                 e.printStackTrace();
             }
         }
@@ -228,85 +239,200 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
     @Override
     public void deploy(WorkspaceDefinition workspaceDefinition) {
         String workspaceId = workspaceDefinition.id();
-        
-        // Bersihkan resource & node lama jika merupakan proses redeploy
+
+        // Bersihkan deployment lama jika ada
         undeployPlugins(workspaceId);
 
-        // 1. Inisialisasi Resource Plugins
+        /*
+         * ============================================================
+         * 1. COMPILE WORKSPACE TERLEBIH DAHULU
+         * ============================================================
+         */
+        CompiledWorkspace compiled = deploymentModule.deploymentService().compile(workspaceDefinition);
+
+        /*
+         * ============================================================
+         * 2. DEPLOY KE EXECUTION ENGINE
+         * ============================================================
+         */
+        executionService.deploy(compiled);
+
+        /*
+         * ============================================================
+         * 3. INITIALIZE RESOURCE PLUGINS
+         * ============================================================
+         */
         List<String> resIds = new ArrayList<>();
+
         if (workspaceDefinition.resources() != null) {
             for (ResourceDefinition resDef : workspaceDefinition.resources()) {
-                if (PluginRegistry.hasPlugin(resDef.type())) {
-                    try {
-                        Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(resDef.type());
-                        NexaPlugin instance = clazz.getDeclaredConstructor().newInstance();
-                        if (instance instanceof NexaResourcePlugin resourcePlugin) {
-                            resourcePlugin.onInit(resDef.id(), resDef.config(), pluginContext);
-                            resourcePlugin.onStart();
-                            globalResourceRegistry.registerResource(resDef.id(), resourcePlugin);
-                            resIds.add(resDef.id());
-                        }
-                    } catch (Exception e) {
-                        throw new RuntimeException("Gagal menginisialisasi resource plugin: " + resDef.id(), e);
+                if (!PluginRegistry.hasPlugin(resDef.type())) {
+                    continue;
+                }
+
+                try {
+                    Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(resDef.type());
+
+                    NexaPlugin instance = clazz.getDeclaredConstructor().newInstance();
+
+                    if (instance instanceof NexaResourcePlugin resourcePlugin) {
+
+                        resourcePlugin.onInit(
+                                resDef.id(),
+                                resDef.config(),
+                                pluginContext);
+
+                        globalResourceRegistry.registerResource(
+                                resDef.id(),
+                                resourcePlugin);
+
+                        resIds.add(resDef.id());
                     }
+
+                } catch (Exception e) {
+                    throw new RuntimeException(
+                            "Gagal menginisialisasi resource plugin: "
+                                    + resDef.id(),
+                            e);
                 }
             }
         }
+
         if (!resIds.isEmpty()) {
             workspaceResourceIds.put(workspaceId, resIds);
         }
 
-        // 2. Inisialisasi Node Plugins
+        /*
+         * ============================================================
+         * 4. INITIALIZE NODE PLUGINS
+         * ============================================================
+         */
         List<String> nodeIds = new ArrayList<>();
+
         if (workspaceDefinition.flows() != null) {
+
             for (FlowDefinition flow : workspaceDefinition.flows()) {
+
                 String flowId = flow.id();
-                if (flow.nodes() != null) {
-                    for (NodeDefinition node : flow.nodes()) {
-                        if (PluginRegistry.hasPlugin(node.type())) {
-                            try {
-                                Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(node.type());
-                                NexaPlugin instance = clazz.getDeclaredConstructor().newInstance();
-                                if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
-                                    lifecycle.onInit(node.id(), node.config(), pluginContext);
-                                }
 
-                                if (instance instanceof NexaSourcePlugin sourcePlugin) {
-                                    String nodeId = node.id();
-                                    sourcePlugin.setEmitter(msg -> trigger(workspaceId, flowId, nodeId, msg));
-                                }
+                if (flow.nodes() == null) {
+                    continue;
+                }
 
-                                PluginRegistry.registerInstance(node.id(), instance);
-                                nodeIds.add(node.id());
-                            } catch (Exception e) {
-                                throw new RuntimeException("Gagal menginisialisasi node plugin: " + node.id(), e);
-                            }
+                for (NodeDefinition node : flow.nodes()) {
+
+                    if (!PluginRegistry.hasPlugin(node.type())) {
+                        continue;
+                    }
+
+                    try {
+
+                        Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(node.type());
+
+                        NexaPlugin instance = clazz.getDeclaredConstructor().newInstance();
+
+                        if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
+
+                            lifecycle.onInit(
+                                    node.id(),
+                                    node.config(),
+                                    pluginContext);
                         }
+
+                        if (instance instanceof NexaSourcePlugin sourcePlugin) {
+
+                            String nodeId = node.id();
+
+                            sourcePlugin.setEmitter(
+                                    msg -> trigger(
+                                            workspaceId,
+                                            flowId,
+                                            nodeId,
+                                            msg));
+                        }
+
+                        PluginRegistry.registerInstance(
+                                node.id(),
+                                instance);
+
+                        nodeIds.add(node.id());
+
+                    } catch (Exception e) {
+
+                        throw new RuntimeException(
+                                "Gagal menginisialisasi node plugin: "
+                                        + node.id(),
+                                e);
                     }
                 }
             }
         }
+
         if (!nodeIds.isEmpty()) {
             workspaceNodeIds.put(workspaceId, nodeIds);
-            if (executionService.isRuntimeStarted()) {
-                for (String nodeId : nodeIds) {
-                    NexaPlugin instance = PluginRegistry.getInstance(nodeId);
-                    if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
-                        try {
-                            lifecycle.onStart();
-                            System.out.println("[PLUGIN START] Started node plugin dynamically: " + nodeId);
-                        } catch (Exception e) {
-                            System.err.println("[PLUGIN START ERROR] Gagal menjalankan onStart untuk node: " + nodeId);
-                            e.printStackTrace();
-                        }
-                    }
+        }
+
+        /*
+         * ============================================================
+         * 5. START RESOURCES
+         * ============================================================
+         */
+        for (String resId : resIds) {
+
+            NexaResourcePlugin resource = globalResourceRegistry.getResource(resId);
+
+            if (resource != null) {
+
+                try {
+
+                    resource.onStart();
+
+                    System.out.println(
+                            "[RESOURCE START] Started resource: "
+                                    + resId);
+
+                } catch (Exception e) {
+
+                    System.err.println(
+                            "[RESOURCE START ERROR] "
+                                    + "Gagal menjalankan onStart untuk resource: "
+                                    + resId);
+
+                    e.printStackTrace();
                 }
             }
         }
 
-        // Compile menggunakan Deployment domain, kemudian pasang di Execution domain
-        CompiledWorkspace compiled = deploymentModule.deploymentService().compile(workspaceDefinition);
-        executionService.deploy(compiled);
+        /*
+         * ============================================================
+         * 6. START NODE PLUGINS
+         * ============================================================
+         */
+        for (String nodeId : nodeIds) {
+
+            NexaPlugin instance = PluginRegistry.getInstance(nodeId);
+
+            if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
+
+                try {
+
+                    lifecycle.onStart();
+
+                    System.out.println(
+                            "[PLUGIN START] Started node plugin dynamically: "
+                                    + nodeId);
+
+                } catch (Exception e) {
+
+                    System.err.println(
+                            "[PLUGIN START ERROR] "
+                                    + "Gagal menjalankan onStart untuk node: "
+                                    + nodeId);
+
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     @Override
@@ -345,7 +471,8 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
     @Override
     public void trigger(String workspaceId, String flowId, String inputNodeId, RuntimeMessage message) {
-        System.out.println("[ENGINE TRIGGER] Triggering workspace: " + workspaceId + " flow: " + flowId + " node: " + inputNodeId);
+        System.out.println(
+                "[ENGINE TRIGGER] Triggering workspace: " + workspaceId + " flow: " + flowId + " node: " + inputNodeId);
         executionService.trigger(workspaceId, flowId, inputNodeId, message);
     }
 

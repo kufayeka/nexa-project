@@ -15,18 +15,22 @@ public final class CompiledFlow {
     private final boolean enabled;
     private final Map<String, CompiledNode> nodeById;
     private final Map<String, Map<String, List<String>>> routesByNodeAndPort;
+    private final Map<String, CompiledConnection> connectionById;
 
     public CompiledFlow(
             String flowId,
             String flowName,
             boolean enabled,
             Map<String, CompiledNode> nodeById,
-            Map<String, Map<String, List<String>>> routesByNodeAndPort) {
+            Map<String, Map<String, List<String>>> routesByNodeAndPort,
+            Map<String, CompiledConnection> connectionById) {
+
         this.flowId = flowId;
         this.flowName = flowName;
         this.enabled = enabled;
         this.nodeById = new ConcurrentHashMap<>(new LinkedHashMap<>(nodeById));
         this.routesByNodeAndPort = Collections.unmodifiableMap(new LinkedHashMap<>(routesByNodeAndPort));
+        this.connectionById = Collections.unmodifiableMap(new LinkedHashMap<>(connectionById));
     }
 
     public String flowId() {
@@ -49,23 +53,35 @@ public final class CompiledFlow {
         return routesByNodeAndPort;
     }
 
+    public Map<String, CompiledConnection> connectionById() {
+        return connectionById;
+    }
+
+    public CompiledConnection connection(String connectionId) {
+        return connectionById.get(connectionId);
+    }
+
     public List<String> inputNodeIds() {
         java.util.ArrayList<String> inputIds = new java.util.ArrayList<>();
+
         for (CompiledNode node : nodeById.values()) {
             if (node.category() == nexa.framework.runtime.domain.workspace.model.NodeCategory.INPUT) {
                 inputIds.add(node.id());
             }
         }
+
         return List.copyOf(inputIds);
     }
 
     public List<String> targets(String sourceNodeId, String sourcePort) {
         Map<String, List<String>> byPort = routesByNodeAndPort.get(sourceNodeId);
+
         if (byPort == null) {
             return List.of();
         }
 
         List<String> targets = byPort.get(sourcePort);
+
         if (targets != null) {
             return targets;
         }
@@ -79,8 +95,10 @@ public final class CompiledFlow {
 
     public void setNodeEnabled(String nodeId, boolean enabled) {
         CompiledNode node = nodeById.get(nodeId);
+
         if (node == null) {
-            throw new ValidationException("Unknown node id " + nodeId + " in flow " + flowId);
+            throw new ValidationException(
+                    "Unknown node id " + nodeId + " in flow " + flowId);
         }
 
         nodeById.put(nodeId, new CompiledNode(
@@ -94,6 +112,3 @@ public final class CompiledFlow {
                 node.compiledScript()));
     }
 }
-
-
-

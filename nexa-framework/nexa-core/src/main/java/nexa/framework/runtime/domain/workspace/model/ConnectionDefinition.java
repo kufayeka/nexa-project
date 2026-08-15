@@ -2,21 +2,25 @@ package nexa.framework.runtime.domain.workspace.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.UUID;
+
 /**
  * ConnectionDefinition mendefinisikan hubungan antar node (rute pesan).
- * Menghubungkan sourcePort dari sourceNode ke targetNode.
+ * Setiap connection memiliki ID unik yang didefinisikan oleh workspace.
  */
 public record ConnectionDefinition(
+        @JsonProperty("id") String id,
         @JsonProperty("sourceNodeId") String sourceNodeId,
         @JsonProperty("sourcePort") String sourcePort,
-        @JsonProperty("targetNodeId") String targetNodeId
-) {
+        @JsonProperty("targetNodeId") String targetNodeId) {
 
     public ConnectionDefinition {
-        // Jika port asal kosong, default-kan ke port "default"
+        if (id == null || id.isBlank()) {
+            id = UUID.randomUUID().toString();
+        }
+
         if (sourcePort == null || sourcePort.isBlank()) {
             sourcePort = "default";
         }
     }
 }
-

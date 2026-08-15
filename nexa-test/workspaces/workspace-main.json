@@ -7,7 +7,7 @@
             "type": "mqtt-client-pool",
             "config": {
                 "name": "koneksi mqtt 1",
-                "brokerUrl": "tcp://127.0.0.1:1883",
+                "brokerUrl": "tcp://broker.hivemq.com:1883",
                 "keepAlive": 60
             }
         },
@@ -16,7 +16,7 @@
             "type": "mqtt-client-pool",
             "config": {
                 "name": "koneksi mqtt 2",
-                "brokerUrl": "tcp://broker.emqx.io:1883",
+                "brokerUrl": "tcp://broker.hivemq.com:1883",
                 "keepAlive": 60
             }
         }
@@ -93,31 +93,37 @@
             ],
             "connections": [
                 {
+                    "id": "7f4a2c91-8d63-4e17-b5a9-2c8f1d6e7034",
                     "sourceNodeId": "mqtt-in-1",
                     "sourcePort": "default",
                     "targetNodeId": "process-data-tengah"
                 },
                 {
+                    "id": "c3e81954-6a27-4b90-9d15-f72c4a8e6310",
                     "sourceNodeId": "mqtt-in-2",
                     "sourcePort": "default",
                     "targetNodeId": "process-data-tengah"
                 },
                 {
+                    "id": "a61d3f82-9c54-47e0-b128-5d7a9f36c204",
                     "sourceNodeId": "mqtt-in-3",
                     "sourcePort": "default",
                     "targetNodeId": "process-data-tengah"
                 },
                 {
+                    "id": "e9257b40-3d18-4ac6-86f2-b91e5c7a2036",
                     "sourceNodeId": "mqtt-in-4",
                     "sourcePort": "default",
                     "targetNodeId": "process-data-tengah"
                 },
                 {
+                    "id": "4b8e2d67-f139-45a0-a6c4-73d9e51b820f",
                     "sourceNodeId": "mqtt-in-5",
                     "sourcePort": "default",
                     "targetNodeId": "process-data-tengah"
                 },
                 {
+                    "id": "d572c906-1a43-4ef8-b637-9c25e8f041ab",
                     "sourceNodeId": "process-data-tengah",
                     "sourcePort": "default",
                     "targetNodeId": "mqtt-out"
