@@ -48,15 +48,16 @@ public final class MqttSharedSinkPlugin implements NexaSinkPlugin {
             MqttMessage mqttMessage = new MqttMessage(rawPayload.toString().getBytes());
             mqttMessage.setQos(1);
 
-            // Only publish if client is active and connected
+            // Never publish directly from the execution thread. The shared
+            // manager owns a bounded outbound queue and a dedicated publisher
+            // worker for each physical MQTT client.
             if (this.mqttClient != null && this.mqttClient.isConnected()) {
-                this.mqttClient.publish(this.topic, mqttMessage);
+                MqttBrokerManager.publish(this.mqttClient, this.topic, mqttMessage);
             }
         } catch (Exception e) {
-            // Suppress printing errors if the client got disconnected/closed during
-            // shutdown
+            // Publish failures must not take down the flow execution thread.
             if (this.mqttClient != null && this.mqttClient.isConnected()) {
-                System.err.println("[MQTT Sink Error] Gagal mempublikasikan data: " + e.getMessage());
+                System.err.println("[MQTT Sink Error] Gagal enqueue data: " + e.getMessage());
             }
         }
     }
@@ -64,5 +65,4 @@ public final class MqttSharedSinkPlugin implements NexaSinkPlugin {
     @Override
     public void onStop() {
     }
-
 }
