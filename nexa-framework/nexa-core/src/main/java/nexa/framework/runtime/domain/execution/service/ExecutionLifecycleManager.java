@@ -1,11 +1,11 @@
 package nexa.framework.runtime.domain.execution.service;
 
+import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
+import nexa.framework.runtime.domain.deployment.model.CompiledNode;
 import nexa.framework.runtime.domain.execution.model.ActiveExecution;
 import nexa.framework.runtime.domain.execution.model.FlowRuntime;
 import nexa.framework.runtime.domain.execution.model.WorkspaceRuntime;
-
 import nexa.framework.runtime.api.RuntimeConfiguration;
-import nexa.framework.runtime.domain.deployment.model.CompiledNode;
 import nexa.framework.runtime.domain.execution.model.ExecutionContext;
 import nexa.framework.runtime.domain.execution.model.ExecutionStatus;
 import nexa.framework.runtime.domain.scheduler.model.InputNodeRuntimeState;
@@ -43,6 +43,10 @@ final class ExecutionLifecycleManager {
             FlowRuntime flowRuntime,
             CompiledNode inputNode,
             RuntimeMessage seedMessage) {
+        if (!workspaceRuntime.enabled() || !flowRuntime.compiledFlow().enabled() || !inputNode.enabled()) {
+            return;
+        }
+
         InputNodeRuntimeState inputState = flowRuntime.inputStateByNodeId().computeIfAbsent(
                 inputNode.id(),
                 ignored -> new InputNodeRuntimeState(inputNode.inputPolicy().maxConcurrentExecutions()));
@@ -55,14 +59,12 @@ final class ExecutionLifecycleManager {
 
         Instant createdAt = Instant.now();
         Instant deadline = createdAt.plus(configuration.maxExecutionLifetime());
-
         ExecutionContext context = new ExecutionContext(
                 workspaceRuntime.workspaceId(),
                 flowRuntime.compiledFlow().flowId(),
                 createdAt,
                 deadline);
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, inputNode.id()));
-
         flowRuntime.statistics().incrementRunning();
         context.retainTask();
 
@@ -81,22 +83,63 @@ final class ExecutionLifecycleManager {
         completeTask(flowRuntime, context.executionId());
     }
 
+    void injectMessageIntoConnection(
+            WorkspaceRuntime workspaceRuntime,
+            FlowRuntime flowRuntime,
+            String connectionId,
+            RuntimeMessage message) {
+        if (!workspaceRuntime.enabled()) {
+            return;
+        }
+
+        CompiledConnection connection = flowRuntime.compiledFlow().connection(connectionId);
+        if (connection == null || !connection.enabled()) {
+            return;
+        }
+
+        var targetNode = flowRuntime.nodeRuntime(connection.targetNodeId());
+        if (targetNode == null || !targetNode.compiledNode().enabled()) {
+            return;
+        }
+
+        Instant createdAt = Instant.now();
+        Instant deadline = createdAt.plus(configuration.maxExecutionLifetime());
+        ExecutionContext context = new ExecutionContext(
+                workspaceRuntime.workspaceId(),
+                flowRuntime.compiledFlow().flowId(),
+                createdAt,
+                deadline);
+        flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, connection.targetNodeId()));
+        flowRuntime.statistics().incrementRunning();
+        context.retainTask();
+
+        ScheduledFuture<?> timeoutTask = scheduler.schedule(
+                () -> cancelExecution(flowRuntime, context.executionId(), true),
+                configuration.maxExecutionLifetime().toMillis(),
+                TimeUnit.MILLISECONDS);
+        context.setTimeoutTask(timeoutTask);
+
+        executionService.nodeExecutor().submitNodeTarget(
+                flowRuntime,
+                context.executionId(),
+                connection.targetNodeId(),
+                message == null ? new RuntimeMessage() : message.deepCopy());
+        completeTask(flowRuntime, context.executionId());
+    }
+
     void completeTask(FlowRuntime flowRuntime, UUID executionId) {
         ActiveExecution activeExecution = flowRuntime.activeExecutions().get(executionId);
         if (activeExecution == null) {
             return;
         }
-
         if (activeExecution.context().releaseTask() > 0) {
             return;
         }
-
         finalizeExecution(flowRuntime, activeExecution);
     }
 
     void finalizeExecution(FlowRuntime flowRuntime, ActiveExecution activeExecution) {
         ExecutionContext context = activeExecution.context();
-
         if (context.status() == ExecutionStatus.RUNNING) {
             if (context.isCancellationRequested()) {
                 context.markCancelled();
@@ -133,7 +176,6 @@ final class ExecutionLifecycleManager {
                 future.cancel(true);
             }
         }
-
         context.cleanup();
     }
 
@@ -167,7 +209,6 @@ final class ExecutionLifecycleManager {
             for (InputNodeRuntimeState inputState : flowRuntime.inputStateByNodeId().values()) {
                 inputState.cancelAllScheduledTriggers();
             }
-
             for (UUID executionId : flowRuntime.activeExecutions().keySet()) {
                 cancelExecution(flowRuntime, executionId, false);
             }
@@ -194,7 +235,6 @@ final class ExecutionLifecycleManager {
                 createdAt,
                 deadline);
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, sourceNodeId));
-
         flowRuntime.statistics().incrementRunning();
         context.retainTask();
 

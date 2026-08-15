@@ -4,9 +4,7 @@ import nexa.framework.runtime.domain.deployment.model.CompiledWorkspace;
 import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
 import nexa.framework.runtime.domain.deployment.model.CompiledFlow;
 import nexa.framework.runtime.domain.deployment.model.CompiledNode;
-
 import nexa.framework.runtime.domain.deployment.exception.ValidationException;
-
 import nexa.framework.runtime.domain.workspace.model.ConnectionDefinition;
 import nexa.framework.runtime.domain.workspace.model.FlowDefinition;
 import nexa.framework.runtime.domain.workspace.model.NodeCategory;
@@ -58,7 +56,6 @@ public final class FlowCompiler {
         if (definition == null) {
             throw new ValidationException("Workspace definition must not be null");
         }
-
         if (definition.id() == null || definition.id().isBlank()) {
             throw new ValidationException("Workspace id must not be blank");
         }
@@ -75,22 +72,18 @@ public final class FlowCompiler {
         for (FlowDefinition flowDefinition : definition.flows()) {
             flowIndex++;
             LOGGER.log(System.Logger.Level.INFO, "Kompilasi flow {0}/{1} id={2} nodes={3}",
-                    flowIndex, definition.flows().size(), flowDefinition.id(),
-                    flowDefinition.nodes().size());
+                    flowIndex, definition.flows().size(), flowDefinition.id(), flowDefinition.nodes().size());
 
             String flowSignature = flowSignature(flowDefinition);
             CompiledFlow cachedFlow = resolveCachedFlow(previousSnapshot, flowDefinition.id(), flowSignature);
-            CompiledFlow compiledFlow = cachedFlow;
-            if (compiledFlow == null) {
-                compiledFlow = compileFlow(definition.id(), flowDefinition);
-            }
+            CompiledFlow compiledFlow = cachedFlow == null
+                    ? compileFlow(definition.id(), flowDefinition)
+                    : cachedFlow;
 
-            CompiledFlow previous = compiledFlows.putIfAbsent(flowDefinition.id(), compiledFlow);
-            if (previous != null) {
+            if (compiledFlows.putIfAbsent(flowDefinition.id(), compiledFlow) != null) {
                 throw new ValidationException(
                         "Workspace " + definition.id() + " contains duplicate flow id " + flowDefinition.id());
             }
-
             flowSignatures.put(flowDefinition.id(), flowSignature);
         }
 
@@ -128,18 +121,14 @@ public final class FlowCompiler {
 
         Map<String, Map<String, List<String>>> routes = new LinkedHashMap<>();
         Map<String, CompiledConnection> connectionById = new LinkedHashMap<>();
-
         for (NodeDefinition nodeDefinition : definition.nodes()) {
             routes.put(nodeDefinition.id(), new LinkedHashMap<>());
         }
 
         for (ConnectionDefinition connection : definition.connections()) {
-
-            // Simpan metadata connection lengkap berdasarkan ID workspace
             if (connectionById.containsKey(connection.id())) {
                 throw new ValidationException(
-                        "Duplicate connection id " + connection.id()
-                                + " in flow " + definition.id());
+                        "Duplicate connection id " + connection.id() + " in flow " + definition.id());
             }
 
             connectionById.put(
@@ -148,41 +137,27 @@ public final class FlowCompiler {
                             connection.id(),
                             connection.sourceNodeId(),
                             connection.sourcePort(),
-                            connection.targetNodeId()));
+                            connection.targetNodeId(),
+                            connection.enabled()));
 
-            // Tetap buat routing lama agar execution engine yang sekarang tetap bekerja
             Map<String, List<String>> byPort = routes.get(connection.sourceNodeId());
-
             if (byPort == null) {
                 throw new ValidationException(
                         "Connection " + connection.id()
-                                + " references unknown source node "
-                                + connection.sourceNodeId());
+                                + " references unknown source node " + connection.sourceNodeId());
             }
 
-            List<String> targets = byPort.computeIfAbsent(
-                    connection.sourcePort(),
-                    ignored -> new ArrayList<>());
-
-            targets.add(connection.targetNodeId());
+            byPort.computeIfAbsent(connection.sourcePort(), ignored -> new ArrayList<>())
+                    .add(connection.targetNodeId());
         }
 
         Map<String, Map<String, List<String>>> immutableRoutes = new LinkedHashMap<>();
-
         for (Map.Entry<String, Map<String, List<String>>> entry : routes.entrySet()) {
-
             Map<String, List<String>> immutableByPort = new LinkedHashMap<>();
-
             for (Map.Entry<String, List<String>> byPortEntry : entry.getValue().entrySet()) {
-
-                immutableByPort.put(
-                        byPortEntry.getKey(),
-                        List.copyOf(byPortEntry.getValue()));
+                immutableByPort.put(byPortEntry.getKey(), List.copyOf(byPortEntry.getValue()));
             }
-
-            immutableRoutes.put(
-                    entry.getKey(),
-                    Map.copyOf(immutableByPort));
+            immutableRoutes.put(entry.getKey(), Map.copyOf(immutableByPort));
         }
 
         return new CompiledFlow(
@@ -204,25 +179,19 @@ public final class FlowCompiler {
         scriptEngineRegistry.dispose();
     }
 
-    private CompiledFlow resolveCachedFlow(
-            WorkspaceCompilationSnapshot snapshot,
-            String flowId,
-            String flowSignature) {
+    private CompiledFlow resolveCachedFlow(WorkspaceCompilationSnapshot snapshot, String flowId, String flowSignature) {
         if (snapshot == null) {
             return null;
         }
-
         String previousSignature = snapshot.flowSignatures().get(flowId);
         if (!flowSignature.equals(previousSignature)) {
             return null;
         }
-
         return snapshot.compiledFlows().get(flowId);
     }
 
     private String flowSignature(FlowDefinition flowDefinition) {
         StringBuilder builder = new StringBuilder();
-
         builder.append(flowDefinition.id()).append('|');
         builder.append(flowDefinition.name()).append('|');
         builder.append(flowDefinition.enabled()).append('|');
@@ -245,6 +214,7 @@ public final class FlowCompiler {
             builder.append(connection.sourceNodeId()).append('|');
             builder.append(connection.sourcePort()).append('|');
             builder.append(connection.targetNodeId()).append('|');
+            builder.append(connection.enabled()).append('|');
         }
 
         return sha256Hex(builder.toString());
@@ -255,7 +225,6 @@ public final class FlowCompiler {
             builder.append("null");
             return;
         }
-
         if (value instanceof Map<?, ?> map) {
             builder.append('{');
             List<String> keys = new ArrayList<>();
@@ -271,7 +240,6 @@ public final class FlowCompiler {
             builder.append('}');
             return;
         }
-
         if (value instanceof List<?> list) {
             builder.append('[');
             for (Object entry : list) {
@@ -281,7 +249,6 @@ public final class FlowCompiler {
             builder.append(']');
             return;
         }
-
         builder.append(String.valueOf(value));
     }
 
@@ -306,7 +273,6 @@ public final class FlowCompiler {
             String workspaceId,
             Map<String, CompiledFlow> compiledFlows,
             Map<String, String> flowSignatures) {
-
         private WorkspaceCompilationSnapshot {
             compiledFlows = Map.copyOf(new LinkedHashMap<>(compiledFlows));
             flowSignatures = Map.copyOf(new LinkedHashMap<>(flowSignatures));
@@ -319,7 +285,6 @@ public final class FlowCompiler {
         for (ScriptEngine engine : loader) {
             engines.add(engine);
         }
-
         return List.copyOf(engines);
     }
 
@@ -327,7 +292,6 @@ public final class FlowCompiler {
         if (nodeDefinition.category() != NodeCategory.EXECUTOR) {
             return null;
         }
-
         if (nexa.framework.runtime.domain.scripting.registry.PluginRegistry.hasPlugin(nodeDefinition.type())) {
             return null;
         }
@@ -336,7 +300,6 @@ public final class FlowCompiler {
         if (!(scriptRaw instanceof String)) {
             scriptRaw = nodeDefinition.config().get("script");
         }
-
         if (!(scriptRaw instanceof String scriptSource)) {
             throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId
                     + " requires string config.code or config.script");
@@ -357,13 +320,9 @@ public final class FlowCompiler {
     }
 
     private String resolveLanguage(NodeDefinition nodeDefinition) {
-        String language = null;
         if (nodeDefinition.language() != null && !nodeDefinition.language().isBlank()) {
-            language = nodeDefinition.language();
-        } else {
-            language = nodeDefinition.type();
+            return nodeDefinition.language();
         }
-
-        return language;
+        return nodeDefinition.type();
     }
 }
