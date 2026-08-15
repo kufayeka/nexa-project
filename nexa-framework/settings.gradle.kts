@@ -17,3 +17,5 @@ include("nexa-script-engine")
 include("nexa-cli")
 include("nexa-mqtt-plugin")
 include("nexa-control-plugin")
+include("nexa-modbus-plugin")
+
