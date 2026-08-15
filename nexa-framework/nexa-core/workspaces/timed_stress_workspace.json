@@ -1,0 +1,578 @@
+{
+  "id" : "ws-timed-stress",
+  "enabled" : true,
+  "resources" : [ ],
+  "flows" : [ {
+    "id" : "flow-timed-stress",
+    "name" : "flow-timed-stress",
+    "enabled" : true,
+    "nodes" : [ {
+      "id" : "out-debug",
+      "category" : "OUTPUT",
+      "type" : "debug-output",
+      "language" : null,
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : { }
+    }, {
+      "id" : "input-timed-0",
+      "category" : "INPUT",
+      "type" : "timed-trigger",
+      "language" : null,
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 1024
+      },
+      "config" : {
+        "payload" : {
+          "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
+        },
+        "interval" : "50ms"
+      }
+    }, {
+      "id" : "exec-router-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "send([\"p0\", \"p1\", \"p2\"], msg)"
+      }
+    }, {
+      "id" : "exec-complex-0-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-0-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-0-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-0-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-0-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-0-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "input-timed-1",
+      "category" : "INPUT",
+      "type" : "timed-trigger",
+      "language" : null,
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 1024
+      },
+      "config" : {
+        "payload" : {
+          "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
+        },
+        "interval" : "50ms"
+      }
+    }, {
+      "id" : "exec-router-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "send([\"p0\", \"p1\", \"p2\"], msg)"
+      }
+    }, {
+      "id" : "exec-complex-1-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-1-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-1-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-1-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-1-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-1-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "input-timed-2",
+      "category" : "INPUT",
+      "type" : "timed-trigger",
+      "language" : null,
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 1024
+      },
+      "config" : {
+        "payload" : {
+          "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
+        },
+        "interval" : "50ms"
+      }
+    }, {
+      "id" : "exec-router-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "send([\"p0\", \"p1\", \"p2\"], msg)"
+      }
+    }, {
+      "id" : "exec-complex-2-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-2-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-2-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-2-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-2-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-2-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "input-timed-3",
+      "category" : "INPUT",
+      "type" : "timed-trigger",
+      "language" : null,
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 1024
+      },
+      "config" : {
+        "payload" : {
+          "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
+        },
+        "interval" : "50ms"
+      }
+    }, {
+      "id" : "exec-router-3",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "send([\"p0\", \"p1\", \"p2\"], msg)"
+      }
+    }, {
+      "id" : "exec-complex-3-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-3-0",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-3-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-3-1",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    }, {
+      "id" : "exec-complex-3-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "// 1. Single-line comment: Memulai kalkulasi sensor batch\n/*\n * 2. Block comment:\n * Melakukan parsing JSON, null-safety, named function, map-filter-reduce,\n * switch-case, regex replace, dan format datetime.\n */\nval rawInput = msg.payload?.rawData ?? \"{\\\"speed\\\":100,\\\"temp\\\":95.5,\\\"batches\\\":[10,20,30]}\"\nval parsed = Json.parse(rawInput)\n\n// 3. Null-safety & type conversion\nval baseSpeed = (parsed?.speed ?? 0).toNumber()\nval temperature = (parsed?.temp ?? 0).toNumber()\n\n// 4. Named function\nfun computeAdjustment(speed, temp) {\n    val rounded = Math.round(temp)\n    if (speed > 120) {\n        return Math.max(rounded, 100)\n    }\n    return Math.min(rounded, 80)\n}\nval adjustment = computeAdjustment(baseSpeed, temperature)\n\n// 5. Higher-order functions (map, filter, reduce) & Lambda\nval batches = parsed?.batches ?? []\nval doubledBatches = batches.map(fun (x) => x * 2)\nval highBatches = doubledBatches.filter(fun (x) => x > 20)\nval sumBatches = highBatches.reduce(fun (acc, x) => acc + x, 0)\n\n// 6. Switch statement\nvar statusStr = \"UNKNOWN\"\nswitch (baseSpeed) {\n    case 100:\n        statusStr = \"STABLE\"\n    case 150:\n        statusStr = \"PEAK\"\n    default:\n        statusStr = \"NORMAL\"\n}\n\n// 7. Regex & string methods\nval sensorName = parsed?.name ?? \"  WO-105-A  \"\nval cleanedSensorName = sensorName.trim().toUpperCase()\nval matches = cleanedSensorName.match(\"WO-\\\\d+\")\nvar extractedWo = \"NONE\"\nif (matches.length > 0) {\n    extractedWo = matches[0]\n}\nval replacedSensorName = Regex.replace(cleanedSensorName, \"-\", \"_\")\n\n// 8. DateTime\nval executionTime = DateTime.now().toISOString()\n\n// 9. Reassemble\nmsg.payload = {\n    originalSpeed: baseSpeed,\n    adjustment: adjustment,\n    status: statusStr,\n    totalBatchCount: batches.length,\n    highBatchSum: sumBatches,\n    extractedWorkOrder: extractedWo,\n    formattedSensor: replacedSensorName,\n    processedAt: executionTime\n}\nsend(msg)"
+      }
+    }, {
+      "id" : "exec-second-3-2",
+      "category" : "EXECUTOR",
+      "type" : "script",
+      "language" : "nexa",
+      "enabled" : true,
+      "inputPolicy" : {
+        "maxConcurrentExecutions" : 2147483647
+      },
+      "config" : {
+        "script" : "msg.payload.stage2Processed = true\nsend(\"default\", msg)"
+      }
+    } ],
+    "connections" : [ {
+      "sourceNodeId" : "input-timed-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-router-0"
+    }, {
+      "sourceNodeId" : "exec-router-0",
+      "sourcePort" : "p0",
+      "targetNodeId" : "exec-complex-0-0"
+    }, {
+      "sourceNodeId" : "exec-complex-0-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-0-0"
+    }, {
+      "sourceNodeId" : "exec-second-0-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-0",
+      "sourcePort" : "p1",
+      "targetNodeId" : "exec-complex-0-1"
+    }, {
+      "sourceNodeId" : "exec-complex-0-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-0-1"
+    }, {
+      "sourceNodeId" : "exec-second-0-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-0",
+      "sourcePort" : "p2",
+      "targetNodeId" : "exec-complex-0-2"
+    }, {
+      "sourceNodeId" : "exec-complex-0-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-0-2"
+    }, {
+      "sourceNodeId" : "exec-second-0-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "input-timed-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-router-1"
+    }, {
+      "sourceNodeId" : "exec-router-1",
+      "sourcePort" : "p0",
+      "targetNodeId" : "exec-complex-1-0"
+    }, {
+      "sourceNodeId" : "exec-complex-1-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-1-0"
+    }, {
+      "sourceNodeId" : "exec-second-1-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-1",
+      "sourcePort" : "p1",
+      "targetNodeId" : "exec-complex-1-1"
+    }, {
+      "sourceNodeId" : "exec-complex-1-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-1-1"
+    }, {
+      "sourceNodeId" : "exec-second-1-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-1",
+      "sourcePort" : "p2",
+      "targetNodeId" : "exec-complex-1-2"
+    }, {
+      "sourceNodeId" : "exec-complex-1-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-1-2"
+    }, {
+      "sourceNodeId" : "exec-second-1-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "input-timed-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-router-2"
+    }, {
+      "sourceNodeId" : "exec-router-2",
+      "sourcePort" : "p0",
+      "targetNodeId" : "exec-complex-2-0"
+    }, {
+      "sourceNodeId" : "exec-complex-2-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-2-0"
+    }, {
+      "sourceNodeId" : "exec-second-2-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-2",
+      "sourcePort" : "p1",
+      "targetNodeId" : "exec-complex-2-1"
+    }, {
+      "sourceNodeId" : "exec-complex-2-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-2-1"
+    }, {
+      "sourceNodeId" : "exec-second-2-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-2",
+      "sourcePort" : "p2",
+      "targetNodeId" : "exec-complex-2-2"
+    }, {
+      "sourceNodeId" : "exec-complex-2-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-2-2"
+    }, {
+      "sourceNodeId" : "exec-second-2-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "input-timed-3",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-router-3"
+    }, {
+      "sourceNodeId" : "exec-router-3",
+      "sourcePort" : "p0",
+      "targetNodeId" : "exec-complex-3-0"
+    }, {
+      "sourceNodeId" : "exec-complex-3-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-3-0"
+    }, {
+      "sourceNodeId" : "exec-second-3-0",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-3",
+      "sourcePort" : "p1",
+      "targetNodeId" : "exec-complex-3-1"
+    }, {
+      "sourceNodeId" : "exec-complex-3-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-3-1"
+    }, {
+      "sourceNodeId" : "exec-second-3-1",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    }, {
+      "sourceNodeId" : "exec-router-3",
+      "sourcePort" : "p2",
+      "targetNodeId" : "exec-complex-3-2"
+    }, {
+      "sourceNodeId" : "exec-complex-3-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "exec-second-3-2"
+    }, {
+      "sourceNodeId" : "exec-second-3-2",
+      "sourcePort" : "default",
+      "targetNodeId" : "out-debug"
+    } ]
+  } ]
+}
