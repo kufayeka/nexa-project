@@ -29,22 +29,17 @@ import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 
 public final class FlowCompiler {
-
     private static final System.Logger LOGGER = System.getLogger(FlowCompiler.class.getName());
     private final FlowValidator validator;
     private final ScriptEngineRegistry scriptEngineRegistry;
     private final ConcurrentMap<String, WorkspaceCompilationSnapshot> workspaceCompilationCache;
 
-    public FlowCompiler(FlowValidator validator) {
-        this(validator, loadScriptEngines());
-    }
-
+    public FlowCompiler(FlowValidator validator) { this(validator, loadScriptEngines()); }
     public FlowCompiler(FlowValidator validator, List<ScriptEngine> scriptEngines) {
         this.validator = validator;
         this.scriptEngineRegistry = new ScriptEngineRegistry(scriptEngines);
         this.workspaceCompilationCache = new ConcurrentHashMap<>();
     }
-
     public FlowCompiler(FlowValidator validator, ScriptEngineRegistry scriptEngineRegistry) {
         this.validator = validator;
         this.scriptEngineRegistry = scriptEngineRegistry;
@@ -54,21 +49,22 @@ public final class FlowCompiler {
     public CompiledWorkspace compileWorkspace(WorkspaceDefinition definition) {
         if (definition == null) throw new ValidationException("Workspace definition must not be null");
         if (definition.id() == null || definition.id().isBlank()) throw new ValidationException("Workspace id must not be blank");
-
         Instant startedAt = Instant.now();
-        LOGGER.log(System.Logger.Level.INFO, "Memulai kompilasi workspace id={0} flows={1}", definition.id(), definition.flows().size());
-
         WorkspaceCompilationSnapshot previousSnapshot = workspaceCompilationCache.get(definition.id());
         Map<String, CompiledFlow> compiledFlows = new LinkedHashMap<>();
         Map<String, String> flowSignatures = new LinkedHashMap<>();
 
-        int flowIndex = 0;
         for (FlowDefinition flowDefinition : definition.flows()) {
-            flowIndex++;
             String flowSignature = flowSignature(flowDefinition);
             CompiledFlow compiledFlow = resolveCachedFlow(previousSnapshot, flowDefinition.id(), flowSignature);
-            if (compiledFlow == null) compiledFlow = compileFlow(definition.id(), flowDefinition);
-
+            if (compiledFlow == null) {
+                compiledFlow = compileFlow(definition.id(), flowDefinition);
+            } else {
+                // Runtime control mutates compiled connection state. Re-apply the persisted definition state on redeploy.
+                for (ConnectionDefinition connection : flowDefinition.connections()) {
+                    compiledFlow.setConnectionEnabled(connection.id(), Boolean.TRUE.equals(connection.enabled()));
+                }
+            }
             if (compiledFlows.putIfAbsent(flowDefinition.id(), compiledFlow) != null) {
                 throw new ValidationException("Workspace " + definition.id() + " contains duplicate flow id " + flowDefinition.id());
             }
@@ -84,13 +80,11 @@ public final class FlowCompiler {
 
     public CompiledFlow compileFlow(String workspaceId, FlowDefinition definition) {
         validator.validate(definition);
-
         Map<String, CompiledNode> nodeById = new LinkedHashMap<>();
         for (NodeDefinition nodeDefinition : definition.nodes()) {
             CompiledScript compiledScript = compileNodeScript(workspaceId, definition.id(), nodeDefinition);
-            nodeById.put(nodeDefinition.id(), new CompiledNode(
-                    nodeDefinition.id(), nodeDefinition.category(), nodeDefinition.type(), nodeDefinition.enabled(),
-                    nodeDefinition.inputPolicy(), nodeDefinition.config(), resolveLanguage(nodeDefinition), compiledScript));
+            nodeById.put(nodeDefinition.id(), new CompiledNode(nodeDefinition.id(), nodeDefinition.category(), nodeDefinition.type(),
+                    nodeDefinition.enabled(), nodeDefinition.inputPolicy(), nodeDefinition.config(), resolveLanguage(nodeDefinition), compiledScript));
         }
 
         Map<String, Map<String, List<String>>> routes = new LinkedHashMap<>();
@@ -98,25 +92,14 @@ public final class FlowCompiler {
         for (NodeDefinition nodeDefinition : definition.nodes()) routes.put(nodeDefinition.id(), new LinkedHashMap<>());
 
         for (ConnectionDefinition connection : definition.connections()) {
-            if (connectionById.containsKey(connection.id())) {
-                throw new ValidationException("Duplicate connection id " + connection.id() + " in flow " + definition.id());
-            }
-
+            if (connectionById.containsKey(connection.id())) throw new ValidationException("Duplicate connection id " + connection.id() + " in flow " + definition.id());
             boolean enabled = Boolean.TRUE.equals(connection.enabled());
-            connectionById.put(connection.id(), new CompiledConnection(
-                    connection.id(), connection.sourceNodeId(), connection.sourcePort(), connection.targetNodeId(), enabled));
+            connectionById.put(connection.id(), new CompiledConnection(connection.id(), connection.sourceNodeId(), connection.sourcePort(), connection.targetNodeId(), enabled));
 
             Map<String, List<String>> byPort = routes.get(connection.sourceNodeId());
-            if (byPort == null) {
-                throw new ValidationException("Connection " + connection.id() + " references unknown source node " + connection.sourceNodeId());
-            }
-            if (!nodeById.containsKey(connection.targetNodeId())) {
-                throw new ValidationException("Connection " + connection.id() + " references unknown target node " + connection.targetNodeId());
-            }
-
-            if (enabled) {
-                byPort.computeIfAbsent(connection.sourcePort(), ignored -> new ArrayList<>()).add(connection.targetNodeId());
-            }
+            if (byPort == null) throw new ValidationException("Connection " + connection.id() + " references unknown source node " + connection.sourceNodeId());
+            if (!nodeById.containsKey(connection.targetNodeId())) throw new ValidationException("Connection " + connection.id() + " references unknown target node " + connection.targetNodeId());
+            if (enabled) byPort.computeIfAbsent(connection.sourcePort(), ignored -> new ArrayList<>()).add(connection.targetNodeId());
         }
 
         return new CompiledFlow(definition.id(), definition.name(), definition.enabled(), nodeById, routes, connectionById);
@@ -126,11 +109,7 @@ public final class FlowCompiler {
         workspaceCompilationCache.remove(workspaceId);
         scriptEngineRegistry.invalidateWorkspace(workspaceId);
     }
-
-    public void dispose() {
-        workspaceCompilationCache.clear();
-        scriptEngineRegistry.dispose();
-    }
+    public void dispose() { workspaceCompilationCache.clear(); scriptEngineRegistry.dispose(); }
 
     private CompiledFlow resolveCachedFlow(WorkspaceCompilationSnapshot snapshot, String flowId, String flowSignature) {
         if (snapshot == null) return null;
@@ -143,14 +122,11 @@ public final class FlowCompiler {
         StringBuilder builder = new StringBuilder();
         builder.append(flowDefinition.id()).append('|').append(flowDefinition.name()).append('|').append(flowDefinition.enabled()).append('|');
         for (NodeDefinition node : flowDefinition.nodes()) {
-            builder.append("n:").append(node.id()).append('|').append(node.category()).append('|').append(node.type()).append('|')
-                    .append(node.language()).append('|').append(node.enabled()).append('|').append(node.inputPolicy().maxConcurrentExecutions()).append('|');
-            appendValue(builder, node.config());
-            builder.append('|');
+            builder.append("n:").append(node.id()).append('|').append(node.category()).append('|').append(node.type()).append('|').append(node.language()).append('|').append(node.enabled()).append('|').append(node.inputPolicy().maxConcurrentExecutions()).append('|');
+            appendValue(builder, node.config()); builder.append('|');
         }
         for (ConnectionDefinition connection : flowDefinition.connections()) {
-            builder.append("c:").append(connection.id()).append('|').append(connection.sourceNodeId()).append('|')
-                    .append(connection.sourcePort()).append('|').append(connection.targetNodeId()).append('|').append(connection.enabled()).append('|');
+            builder.append("c:").append(connection.id()).append('|').append(connection.sourceNodeId()).append('|').append(connection.sourcePort()).append('|').append(connection.targetNodeId()).append('|').append(connection.enabled()).append('|');
         }
         return sha256Hex(builder.toString());
     }
@@ -159,18 +135,12 @@ public final class FlowCompiler {
         if (value == null) { builder.append("null"); return; }
         if (value instanceof Map<?, ?> map) {
             builder.append('{');
-            List<String> keys = new ArrayList<>();
-            for (Object key : map.keySet()) keys.add(String.valueOf(key));
-            Collections.sort(keys);
+            List<String> keys = new ArrayList<>(); for (Object key : map.keySet()) keys.add(String.valueOf(key)); Collections.sort(keys);
             for (String key : keys) { builder.append(key).append('='); appendValue(builder, map.get(key)); builder.append(','); }
-            builder.append('}');
-            return;
+            builder.append('}'); return;
         }
         if (value instanceof List<?> list) {
-            builder.append('[');
-            for (Object entry : list) { appendValue(builder, entry); builder.append(','); }
-            builder.append(']');
-            return;
+            builder.append('['); for (Object entry : list) { appendValue(builder, entry); builder.append(','); } builder.append(']'); return;
         }
         builder.append(String.valueOf(value));
     }
@@ -181,9 +151,7 @@ public final class FlowCompiler {
             StringBuilder builder = new StringBuilder(hash.length * 2);
             for (byte b : hash) { builder.append(Character.forDigit((b >>> 4) & 0xF, 16)); builder.append(Character.forDigit(b & 0xF, 16)); }
             return builder.toString();
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 algorithm not available", exception);
-        }
+        } catch (NoSuchAlgorithmException exception) { throw new IllegalStateException("SHA-256 algorithm not available", exception); }
     }
 
     private record WorkspaceCompilationSnapshot(String workspaceId, Map<String, CompiledFlow> compiledFlows, Map<String, String> flowSignatures) {
@@ -195,21 +163,16 @@ public final class FlowCompiler {
 
     private static List<ScriptEngine> loadScriptEngines() {
         List<ScriptEngine> engines = new ArrayList<>();
-        ServiceLoader<ScriptEngine> loader = ServiceLoader.load(ScriptEngine.class);
-        for (ScriptEngine engine : loader) engines.add(engine);
+        for (ScriptEngine engine : ServiceLoader.load(ScriptEngine.class)) engines.add(engine);
         return List.copyOf(engines);
     }
 
     private CompiledScript compileNodeScript(String workspaceId, String flowId, NodeDefinition nodeDefinition) {
         if (nodeDefinition.category() != NodeCategory.EXECUTOR) return null;
         if (nexa.framework.runtime.domain.scripting.registry.PluginRegistry.hasPlugin(nodeDefinition.type())) return null;
-
         Object scriptRaw = nodeDefinition.config().get("code");
         if (!(scriptRaw instanceof String)) scriptRaw = nodeDefinition.config().get("script");
-        if (!(scriptRaw instanceof String scriptSource)) {
-            throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId + " requires string config.code or config.script");
-        }
-
+        if (!(scriptRaw instanceof String scriptSource)) throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId + " requires string config.code or config.script");
         String language = resolveLanguage(nodeDefinition);
         if (language == null || language.isBlank()) throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId + " requires language");
         ScriptEngine scriptEngine = scriptEngineRegistry.require(language, flowId, nodeDefinition.id());
