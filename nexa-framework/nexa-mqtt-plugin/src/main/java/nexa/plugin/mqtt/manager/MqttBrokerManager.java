@@ -7,7 +7,6 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -87,9 +86,7 @@ public final class MqttBrokerManager {
         return client;
     }
 
-    /**
-     * Enqueues an outbound MQTT message for the shared physical client.
-     */
+    /** Enqueues an outbound MQTT message for the shared physical client. */
     public static boolean publish(MqttClient client, String topic, MqttMessage message) {
         if (client == null || topic == null || topic.isBlank() || message == null) {
             return false;
@@ -103,7 +100,7 @@ public final class MqttBrokerManager {
                 ignored -> new PublishWorker(client, PublishConfig.defaults()));
 
         boolean accepted = worker.enqueue(new PublishRequest(topic, copyMessage(message)));
-        if (!accepted) {
+        if (!accepted && worker.config.enabled()) {
             System.err.println("[MQTT Pool] Publish queue full, dropping message for topic: " + topic);
         }
         return accepted;
@@ -243,16 +240,31 @@ public final class MqttBrokerManager {
             return new PublishConfig(true, DEFAULT_QUEUE_CAPACITY, DEFAULT_OVERFLOW_STRATEGY, DEFAULT_WORKER_THREADS);
         }
 
+        /**
+         * Expected resource configuration:
+         * {
+         *   "publish": {
+         *     "queue": {
+         *       "enabled": true,
+         *       "capacity": 10000,
+         *       "overflowStrategy": "BLOCK"
+         *     },
+         *     "worker": {
+         *       "threads": 2
+         *     }
+         *   }
+         * }
+         */
         public static PublishConfig fromConfig(Map<String, Object> config) {
             Object publishValue = config == null ? null : config.get("publish");
             if (!(publishValue instanceof Map<?, ?> publish)) {
                 return defaults();
             }
 
-            boolean enabled = booleanValue(publish.get("enabled"), true);
-            int capacity = intValue(publish.get("capacity"), DEFAULT_QUEUE_CAPACITY);
-            String overflowStrategy = stringValue(publish.get("overflowStrategy"), DEFAULT_OVERFLOW_STRATEGY);
-            int workerThreads = intValue(publish.get("workerThreads"), DEFAULT_WORKER_THREADS);
+            boolean enabled = true;
+            int capacity = DEFAULT_QUEUE_CAPACITY;
+            String overflowStrategy = DEFAULT_OVERFLOW_STRATEGY;
+            int workerThreads = DEFAULT_WORKER_THREADS;
 
             Object queueValue = publish.get("queue");
             if (queueValue instanceof Map<?, ?> queue) {
@@ -333,8 +345,6 @@ public final class MqttBrokerManager {
 
         private void updateConfig(PublishConfig nextConfig) {
             if (nextConfig == null || !running.get()) return;
-            // Queue capacity and worker count are fixed for a worker lifetime.
-            // Configuration is applied when the physical client is first created.
             this.config = nextConfig;
         }
 
