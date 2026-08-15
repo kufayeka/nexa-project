@@ -1,10 +1,12 @@
 package nexa.plugin.mqtt.node;
 
 import nexa.framework.runtime.api.plugin.NexaSourcePlugin;
-import nexa.framework.runtime.api.plugin.NexaPluginContext;
 import nexa.framework.runtime.api.model.RuntimeMessage;
+import nexa.framework.runtime.api.plugin.NexaPluginContext;
 import nexa.plugin.mqtt.manager.MqttBrokerManager;
 import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -14,6 +16,7 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
     private String mqttClientPool;
     private String topic;
     private String nodeId;
+    private boolean subscribed;
 
     @Override
     public String getPluginType() {
@@ -30,17 +33,13 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
             final String targetId,
             final Map<String, Object> config,
             final NexaPluginContext context) throws Exception {
-
         this.nodeId = targetId;
         this.mqttClientPool = (String) config.get("mqttClientPool");
-        this.topic = (String) config.getOrDefault(
-                "topic",
-                "sensor/data");
+        this.topic = (String) config.getOrDefault("topic", "sensor/data");
     }
 
     @Override
     public void onStart() throws Exception {
-
         Object clientObj = MqttBrokerManager.getClientByNameOrId(this.mqttClientPool);
 
         if (clientObj instanceof MqttClient client) {
@@ -60,39 +59,38 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
                         + " | ClientID: " + mqttClient.getClientId()
                         + " | ServerURI: " + mqttClient.getServerURI());
 
-        this.mqttClient.subscribe(topic, (receivedTopic, mqttMessage) -> {
+        MqttBrokerManager.subscribe(
+                this.mqttClient,
+                this.topic,
+                this.nodeId,
+                this::handleMessage);
+        this.subscribed = true;
+    }
 
-            System.out.println(
-                    "[MQTT Input Node] Received message on topic "
-                            + receivedTopic
-                            + " in node "
-                            + nodeId);
+    private void handleMessage(String receivedTopic, MqttMessage mqttMessage) {
+        System.out.println(
+                "[MQTT Input Node] Received message on topic "
+                        + receivedTopic
+                        + " in node "
+                        + nodeId);
 
-            RuntimeMessage nexaMsg = new RuntimeMessage();
+        RuntimeMessage nexaMsg = new RuntimeMessage();
+        nexaMsg.writeValue("payload.rawData", new String(mqttMessage.getPayload()));
+        nexaMsg.writeValue("payload.topic", receivedTopic);
 
-            nexaMsg.writeValue(
-                    "payload.rawData",
-                    new String(mqttMessage.getPayload()));
-
-            nexaMsg.writeValue(
-                    "payload.topic",
-                    receivedTopic);
-
-            if (this.emitter != null) {
-                this.emitter.accept(nexaMsg);
-            }
-        });
+        if (this.emitter != null) {
+            this.emitter.accept(nexaMsg);
+        }
     }
 
     @Override
     public void onStop() {
+        if (!subscribed) return;
+
         try {
-            // Unsubscribe topik dari broker saat undeploy/stop, koneksi fisik tetap hidup
-            // di level resource
-            if (this.mqttClient != null && this.mqttClient.isConnected()) {
-                this.mqttClient.unsubscribe(this.topic);
-            }
-        } catch (Exception ignored) {
+            MqttBrokerManager.unsubscribe(this.mqttClient, this.topic, this.nodeId);
+        } finally {
+            subscribed = false;
         }
     }
 }
