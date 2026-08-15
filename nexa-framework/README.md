@@ -59,35 +59,72 @@ Untuk informasi detail tentang API runtime, lihat modul **`nexa-api`** di reposi
 
 Proyek ini dilisensikan di bawah lisensi internal Kufayeka Industrial Automation.
 
-## 🛠️ Quick Start & Panduan Operasional
+## 🛠️ Quick Start & Panduan Operasional (Untuk Pemula)
 
-### 1. Prasyarat System
-* **Java Development Kit (JDK) 25** atau lebih baru.
-* **Gradle build tool** (disediakan gradle wrapper bawaan).
+### 1. Konsep Penting Gradle & Multi-Module
+Nexa saat ini menggunakan struktur **Multi-Project Gradle**. Artinya, terdapat satu project induk (`nexa-framework`) yang membawahi beberapa sub-project (modul) independen.
+
+Ketika Anda menjalankan Gradle task di folder root `nexa-framework`, Gradle akan mengeksekusi task tersebut untuk **seluruh modul** yang terdaftar di `settings.gradle.kts` secara otomatis.
 
 ---
 
-### 2. Membangun Proyek (Build)
-Untuk mengompilasi seluruh modul dan memaketkannya menjadi file JAR, jalankan perintah berikut di folder root proyek:
+### 2. Apa itu `shadowJar`?
+Secara default, task `jar` bawaan Java hanya membungkus kode program yang Anda tulis sendiri tanpa mengikutsertakan library eksternal (pihak ketiga) yang di-import. Jika dijalankan, Java akan melempar error `ClassNotFoundException` karena library tambahannya tidak ada.
+
+**`shadowJar` (atau sering disebut Fat JAR / Uber JAR)** adalah task khusus dari Shadow Plugin yang bertugas untuk:
+1. Mengompilasi kode program Anda.
+2. Mengambil seluruh library pihak ketiga yang dibutuhkan (contoh: Jackson untuk parse JSON, Paho untuk MQTT).
+3. Membundel (menggabungkan) semuanya ke dalam **satu file JAR tunggal**.
+
+Dengan **Fat JAR**, Anda bisa menjalankan aplikasi di server mana saja hanya dengan satu file JAR tersebut menggunakan perintah `java -jar nama-file.jar` tanpa perlu menginstal library tambahan secara manual.
+
+---
+
+### 3. Membangun Proyek (Build All Modules)
+Untuk membangun (compile dan bundling) seluruh modul sekaligus, jalankan perintah berikut di terminal/PowerShell pada direktori `d:\DEV\kufayeka\nexa-project\nexa-framework`:
 
 ```powershell
 ./gradlew.bat shadowJar
 ```
 
-#### Hasil Output Kompilasi & Penjelasannya:
-Setelah proses build selesai, Anda akan mendapatkan file JAR pada masing-masing modul:
+#### Dimana Hasil Build Masing-Masing Modul?
+Ya! Perintah di atas akan secara otomatis membuild JAR pada masing-masing folder modulnya sendiri di dalam sub-folder `build/libs/`:
 
-| Modul | Lokasi File JAR | Kegunaan |
-|---|---|---|
-| **`nexa-api`** | `nexa-api/build/libs/nexa-api.jar` | **Public API Contract**. Hanya berisi interface, model, dan lifecycle (`NexaPlugin`, `RuntimeMessage`, dll.). Digunakan sebagai dependency compile-only saat Anda mengembangkan plugin eksternal baru (seperti plugin MQTT). |
-| **`nexa-core`** | `nexa-core/build/libs/nexa-core.jar` | **Core Runtime Engine**. Berisi logika utama pemrosesan flow, parser workspace JSON, virtual threads scheduler, dan statistics. |
-| **`nexa-script-engine`** | `nexa-script-engine/build/libs/nexa-script-engine.jar` | **Scripting Engine (Nexa DSL)**. Menyediakan implementasi compiler dan interpreter bahasa Nexa DSL. |
-| **`nexa-cli`** | `nexa-cli/build/libs/nexa-cli.jar` | **Standalone Runner CLI**. Merupakan **Fat JAR** runnable yang membungkus runner utama (`NexaStandaloneRunner`), core engine, dan dependensi lainnya. |
+| Modul (Sub-project) | Lokasi File JAR Hasil Build | Jenis JAR | Kegunaan |
+|---|---|---|---|
+| **`nexa-api`** | `nexa-api/build/libs/nexa-api.jar` | Plain JAR | Berisi interface & kontrak publik. Hanya di-import oleh pengembang plugin (tidak dijalankan langsung). |
+| **`nexa-core`** | `nexa-core/build/libs/nexa-core.jar` | Plain JAR | Core engine pemroses flow. Dipanggil oleh modul CLI. |
+| **`nexa-script-engine`** | `nexa-script-engine/build/libs/nexa-script-engine.jar` | Plain JAR | Implementasi compiler/interpreter Nexa DSL. |
+| **`nexa-cli`** | `nexa-cli/build/libs/nexa-cli.jar` | **Fat JAR** (Shadow) | **Runner Utama Standalone**. Ini adalah file JAR yang Anda jalankan untuk memutar engine Nexa via Command Line. |
+| **`nexa-mqtt-plugin`** | `nexa-mqtt-plugin/build/libs/nexa-mqtt-plugin.jar` | **Fat JAR** (Shadow) | Plugin MQTT yang berisi node input/sink. Dimuat secara dinamis oleh Runner CLI. |
 
 ---
 
-### 3. Menjalankan Unit & Integration Test
-Untuk menjalankan seluruh suite pengujian otomatis (unit tests, validation, dan platform integration tests):
+### 4. Cara Membangun & Menggunakan Plugin (Untuk Pemula)
+
+Jika Anda ingin membuat atau mengompilasi plugin (contoh: `nexa-mqtt-plugin`):
+
+#### A. Cara Mengompilasi Plugin Saja:
+Jika Anda hanya mengubah kode di dalam folder `nexa-mqtt-plugin` dan tidak ingin mem-build ulang modul core lainnya, Anda bisa menjalankan task spesifik untuk modul tersebut:
+
+```powershell
+# Jalankan perintah ini di folder root nexa-framework
+./gradlew.bat :nexa-mqtt-plugin:shadowJar
+```
+Perintah ini hanya akan mengompilasi dan menghasilkan file JAR plugin di folder `nexa-framework/nexa-mqtt-plugin/build/libs/nexa-mqtt-plugin.jar`.
+
+#### B. Cara Menjalankan Plugin di Lingkungan Test (`nexa-test`):
+Plugin di Nexa bersifat **Pluggable (Dinamis)**. Anda tidak perlu menyatukan kode plugin ke dalam core engine. Cukup ikuti langkah berikut:
+
+1. Build plugin dengan perintah `./gradlew.bat :nexa-mqtt-plugin:shadowJar`.
+2. Salin file JAR hasil build (`nexa-mqtt-plugin.jar`) ke folder `nexa-test/plugins/`.
+3. Jalankan aplikasi runner (`nexa-core.jar` atau `nexa-cli.jar`) di folder `nexa-test`.
+4. Runner akan mendeteksi file JAR tersebut di folder `plugins/` secara otomatis saat startup dan meregistrasikannya ke sistem.
+
+---
+
+### 5. Menjalankan Unit & Integration Test
+Untuk menjalankan seluruh suite pengujian otomatis di seluruh modul:
 
 ```powershell
 ./gradlew.bat test
@@ -96,40 +133,33 @@ Untuk menjalankan seluruh suite pengujian otomatis (unit tests, validation, dan 
 
 ---
 
-### 4. Cara Menjalankan Aplikasi (Running standalone CLI)
+### 6. Cara Menjalankan Aplikasi Utama (Running CLI)
 
-#### Persyaratan File & JAR untuk Menjalankan App:
-Untuk menjalankan aplikasi secara mandiri di production atau test env, Anda membutuhkan struktur folder seperti berikut:
+#### Struktur Folder untuk Menjalankan App:
+Untuk menjalankan aplikasi secara mandiri (misal pada folder `nexa-test`), susunlah file JAR hasil build Anda seperti ini:
 
 ```
 workspace-folder/
 │
-├── nexa-cli.jar                   # JAR Runner Utama (diambil dari nexa-cli/build/libs/)
+├── nexa-core.jar                  # JAR Runner Utama (salinan dari nexa-cli/build/libs/nexa-cli.jar)
 │
 ├── workspaces/
 │   └── workspace-main.json        # File JSON yang mendefinisikan graf/topologi flow
 │
 └── plugins/                       # Folder opsional untuk menaruh plugin eksternal
-    └── nexa-mqtt-plugin.jar       # Contoh biner plugin MQTT eksternal
+    └── nexa-mqtt-plugin.jar       # Biner plugin MQTT yang Anda salin ke sini
 ```
 
-#### Perintah untuk Menjalankan (Running command):
-Jalankan file jar utama menggunakan java runtime:
+#### Jalankan Menggunakan Java Runtime:
+Buka terminal pada folder tersebut, lalu jalankan:
 
 ```powershell
-java -jar nexa-cli.jar [path_ke_file_workspace.json]
+java -jar nexa-core.jar
 ```
 
 * **Default Workspace**: Jika Anda tidak menyertakan argumen path file JSON, runner secara otomatis akan memuat file `workspaces/workspace-main.json`.
-* **Dynamic Plugin Loading**: Saat aplikasi dijalankan, `NexaStandaloneRunner` secara dinamis akan memindai folder `plugins/` yang berada sejajar dengannya, mendeteksi semua file `.jar` di dalamnya, dan memuat class plugin eksternal secara otomatis menggunakan `ServiceLoader`.
+* **Dynamic Plugin Loading**: Saat aplikasi dijalankan, runner secara dinamis akan memindai folder `plugins/` yang berada sejajar dengannya, mendeteksi semua file `.jar` di dalamnya, dan memuat class plugin eksternal secara otomatis menggunakan `ServiceLoader`.
 * **Dynamic Scripting Loader**: Script engine untuk executor node (seperti Nexa DSL compiler) akan di-load secara dinamis saat runtime mendeteksi tipe script yang sesuai pada workspace JSON.
-
-#### Menjalankan Lewat Gradle (Development Mode):
-Jika Anda masih dalam tahap pengembangan dan ingin langsung menjalankan runner tanpa memaketkan JAR:
-
-```powershell
-./gradlew :nexa-cli:runStandalone -PappArgs="workspaces/workspace-main.json"
-```
 
 ---
 
@@ -142,3 +172,4 @@ Jika Anda masih dalam tahap pengembangan dan ingin langsung menjalankan runner t
 
 ## 📜 Lisensi
 Proyek ini dilisensikan di bawah lisensi internal Kufayeka Industrial Automation.
+

@@ -15,4 +15,5 @@ include("nexa-api")
 include("nexa-core")
 include("nexa-script-engine")
 include("nexa-cli")
+include("nexa-mqtt-plugin")
 

@@ -58,8 +58,13 @@ repositories {
 
 dependencies {
     // 1. Ambil nexa-api.jar sebagai kontrak COMPILE ONLY (Wajib!)
-    // Sesuaikan path-nya ke lokasi nexa-api.jar hasil build kamu sebelumnya
-    compileOnly(files("../nexa-framework/nexa-api/build/libs/nexa-api.jar"))
+    
+    // PILIHAN A: Jika dikembangkan di dalam multi-module project nexa-framework
+    compileOnly(project(":nexa-api"))
+
+    // PILIHAN B: Jika dikembangkan di project/folder terpisah di luar nexa-framework
+    // Salin file nexa-api.jar ke folder 'libs/' proyek Anda, lalu arahkan seperti ini:
+    // compileOnly(files("libs/nexa-api.jar"))
 
     // 2. Dependensi pihak ketiga yang murni dibutuhkan oleh plugin wajib menggunakan 'implementation'
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
