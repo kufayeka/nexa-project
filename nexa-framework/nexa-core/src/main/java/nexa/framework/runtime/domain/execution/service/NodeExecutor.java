@@ -3,8 +3,8 @@ package nexa.framework.runtime.domain.execution.service;
 import nexa.framework.runtime.domain.execution.model.ActiveExecution;
 import nexa.framework.runtime.domain.execution.model.FlowRuntime;
 import nexa.framework.runtime.domain.execution.model.NodeRuntime;
-
 import nexa.framework.runtime.api.OutputConsumer;
+import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
 import nexa.framework.runtime.domain.deployment.model.CompiledNode;
 import nexa.framework.runtime.domain.deployment.exception.ValidationException;
 import nexa.framework.runtime.domain.workspace.model.NodeCategory;
@@ -52,30 +52,39 @@ final class NodeExecutor {
             String sourcePort,
             RuntimeMessage message) {
         ActiveExecution activeExecution = flowRuntime.activeExecutions().get(executionId);
-        if (activeExecution == null) {
+        if (activeExecution == null || activeExecution.context().isCancellationRequested()) {
             return;
         }
-
-        if (activeExecution.context().isCancellationRequested()) {
-            return;
-        }
-
-        if (connectionController.isConnectionDisabled(sourceNodeId)) {
-            return;
-        }
-        connectionController.incrementMessageCount(sourceNodeId);
 
         List<NodeRuntime> targets = flowRuntime.targets(sourceNodeId, sourcePort);
         int totalTargets = targets.size();
-        System.out.println("[NODE EXECUTOR] submitNodeRoutes from: " + sourceNodeId + " to port: " + sourcePort + " | targets found: " + totalTargets);
+        System.out.println("[NODE EXECUTOR] submitNodeRoutes from: " + sourceNodeId
+                + " to port: " + sourcePort + " | targets found: " + totalTargets);
+
         for (int index = 0; index < totalTargets; index++) {
             NodeRuntime targetNodeRuntime = targets.get(index);
+            String targetNodeId = targetNodeRuntime.compiledNode().id();
+
+            // A connection can be disabled while a route is already being scheduled.
+            // Check again immediately before dispatching the node.
+            if (!flowRuntime.isRouteEnabled(sourceNodeId, sourcePort, targetNodeId)) {
+                continue;
+            }
+
+            incrementConnectionCounters(flowRuntime, sourceNodeId, sourcePort, targetNodeId);
+
             RuntimeMessage branchMessage = totalTargets <= 1 ? message : message.deepCopy();
             activeExecution.context().retainTask();
 
             FutureTask<Void> futureTask = new FutureTask<>(() -> {
                 try {
-                    executeNode(flowRuntime, activeExecution, targetNodeRuntime, branchMessage);
+                    executeNode(
+                            flowRuntime,
+                            activeExecution,
+                            targetNodeRuntime,
+                            branchMessage,
+                            sourceNodeId,
+                            sourcePort);
                     return null;
                 } finally {
                     executionService.lifecycleManager().completeTask(flowRuntime, executionId);
@@ -92,18 +101,84 @@ final class NodeExecutor {
         }
     }
 
+    public void submitNodeTarget(
+            FlowRuntime flowRuntime,
+            UUID executionId,
+            String targetNodeId,
+            RuntimeMessage message) {
+        ActiveExecution activeExecution = flowRuntime.activeExecutions().get(executionId);
+        if (activeExecution == null || activeExecution.context().isCancellationRequested()) {
+            return;
+        }
+
+        NodeRuntime targetNodeRuntime = flowRuntime.nodeRuntime(targetNodeId);
+        if (targetNodeRuntime == null) {
+            return;
+        }
+
+        activeExecution.context().retainTask();
+        FutureTask<Void> futureTask = new FutureTask<>(() -> {
+            try {
+                executeNode(
+                        flowRuntime,
+                        activeExecution,
+                        targetNodeRuntime,
+                        message,
+                        null,
+                        null);
+                return null;
+            } finally {
+                executionService.lifecycleManager().completeTask(flowRuntime, executionId);
+            }
+        }) {
+            @Override
+            protected void done() {
+                activeExecution.futures().remove(this);
+            }
+        };
+
+        activeExecution.futures().add(futureTask);
+        workerExecutor.execute(futureTask);
+    }
+
+    private void incrementConnectionCounters(
+            FlowRuntime flowRuntime,
+            String sourceNodeId,
+            String sourcePort,
+            String targetNodeId) {
+        for (CompiledConnection connection : flowRuntime.compiledFlow().connectionById().values()) {
+            if (connection.enabled()
+                    && connection.sourceNodeId().equals(sourceNodeId)
+                    && connection.sourcePort().equals(sourcePort)
+                    && connection.targetNodeId().equals(targetNodeId)) {
+                connectionController.incrementMessageCount(connection.id());
+            }
+        }
+    }
+
     private void executeNode(
             FlowRuntime flowRuntime,
             ActiveExecution activeExecution,
             NodeRuntime nodeRuntime,
-            RuntimeMessage message) {
+            RuntimeMessage message,
+            String upstreamSourceNodeId,
+            String upstreamSourcePort) {
         ExecutionContext context = activeExecution.context();
         if (context.isCancellationRequested()) {
             return;
         }
 
+        if (upstreamSourceNodeId != null
+                && !flowRuntime.isRouteEnabled(
+                        upstreamSourceNodeId,
+                        upstreamSourcePort,
+                        nodeRuntime.compiledNode().id())) {
+            return;
+        }
+
         CompiledNode node = nodeRuntime.compiledNode();
-        System.out.println("[NODE EXECUTOR] executeNode id: " + node.id() + " | category: " + node.category() + " | enabled: " + node.enabled());
+        System.out.println("[NODE EXECUTOR] executeNode id: " + node.id()
+                + " | category: " + node.category() + " | enabled: " + node.enabled());
         if (!node.enabled() || nodeController.isNodeDisabled(node.id())) {
             return;
         }
@@ -146,8 +221,7 @@ final class NodeExecutor {
         } catch (Throwable throwable) {
             nodeController.incrementErrors(node.id());
             System.err.println("[NODE EXECUTION ERROR][" + node.id() + "] "
-                    + throwable.getClass().getSimpleName()
-                    + ": " + throwable.getMessage());
+                    + throwable.getClass().getSimpleName() + ": " + throwable.getMessage());
             throwable.printStackTrace();
 
             int lineNumber = -1;
@@ -164,15 +238,15 @@ final class NodeExecutor {
                 cause = cause.getCause();
             }
 
-            eventBus.publish("nexa/monitor/node/errors", new nexa.framework.runtime.api.control.events.ScriptNodeFailureEvent(
-                context.workspaceId(),
-                context.flowId(),
-                node.id(),
-                lineNumber,
-                throwable.getMessage() != null ? throwable.getMessage() : throwable.toString(),
-                message,
-                System.currentTimeMillis()
-            ));
+            eventBus.publish("nexa/monitor/node/errors",
+                    new nexa.framework.runtime.api.control.events.ScriptNodeFailureEvent(
+                            context.workspaceId(),
+                            context.flowId(),
+                            node.id(),
+                            lineNumber,
+                            throwable.getMessage() != null ? throwable.getMessage() : throwable.toString(),
+                            message,
+                            System.currentTimeMillis()));
 
             if (!context.isCancellationRequested()) {
                 context.markFailed(throwable);
