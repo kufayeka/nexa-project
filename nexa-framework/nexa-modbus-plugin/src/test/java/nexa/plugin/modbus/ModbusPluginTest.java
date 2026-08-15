@@ -16,21 +16,21 @@ public class ModbusPluginTest {
     @Test
     public void testEndiannessSwaps() {
         // ABCD (Big Endian)
-        byte[] raw = new byte[]{0x11, 0x22, 0x33, 0x44};
+        byte[] raw = new byte[] { 0x11, 0x22, 0x33, 0x44 };
         byte[] abcd = ModbusDataConverter.applyEndianness(raw, "ABCD");
         assertArrayEquals(raw, abcd);
 
         // BADC (Byte Swap)
         byte[] badc = ModbusDataConverter.applyEndianness(raw, "BADC");
-        assertArrayEquals(new byte[]{0x22, 0x11, 0x44, 0x33}, badc);
+        assertArrayEquals(new byte[] { 0x22, 0x11, 0x44, 0x33 }, badc);
 
         // CDAB (Word Swap)
         byte[] cdab = ModbusDataConverter.applyEndianness(raw, "CDAB");
-        assertArrayEquals(new byte[]{0x33, 0x44, 0x11, 0x22}, cdab);
+        assertArrayEquals(new byte[] { 0x33, 0x44, 0x11, 0x22 }, cdab);
 
         // DCBA (Little Endian / Double Swap)
         byte[] dcba = ModbusDataConverter.applyEndianness(raw, "DCBA");
-        assertArrayEquals(new byte[]{0x44, 0x33, 0x22, 0x11}, dcba);
+        assertArrayEquals(new byte[] { 0x44, 0x33, 0x22, 0x11 }, dcba);
     }
 
     @Test
@@ -102,7 +102,7 @@ public class ModbusPluginTest {
         listVal.add(20);
         listVal.add(30);
         int[] rawRegs = ModbusDataConverter.encodeValue(listVal, "RAW_INT", "ABCD", 3);
-        assertArrayEquals(new int[]{10, 20, 30}, rawRegs);
+        assertArrayEquals(new int[] { 10, 20, 30 }, rawRegs);
         Object rawDecoded = ModbusDataConverter.decodeValue(rawRegs, "RAW_INT", "ABCD");
         assertEquals(listVal, rawDecoded);
     }
@@ -132,18 +132,46 @@ public class ModbusPluginTest {
         TestModbusTask write2 = new TestModbusTask(1, 20L, 1, 100, true);
         assertTrue(write1.compareTo(write2) < 0, "Write same-priority tasks must be FIFO ordered");
 
-        // 3. Compare same priorities (READ vs READ) with sortReadQueue = true: sort by Unit ID then Address
+        // 3. Compare same priorities (READ vs READ) with sortReadQueue = true: sort by
+        // Unit ID then Address
         TestModbusTask readId2 = new TestModbusTask(2, 100L, 2, 50, true);
         TestModbusTask readId1 = new TestModbusTask(2, 200L, 1, 1000, true);
         assertTrue(readId1.compareTo(readId2) < 0, "Read same-priority tasks must be sorted by UnitID first");
 
         TestModbusTask readAddr2 = new TestModbusTask(2, 300L, 1, 500, true);
         TestModbusTask readAddr1 = new TestModbusTask(2, 400L, 1, 200, true);
-        assertTrue(readAddr1.compareTo(readAddr2) < 0, "Read same-priority tasks with same UnitID must be sorted by Address");
+        assertTrue(readAddr1.compareTo(readAddr2) < 0,
+                "Read same-priority tasks with same UnitID must be sorted by Address");
 
-        // 4. Compare same priorities (READ vs READ) with sortReadQueue = false: FIFO sequence number
+        // 4. Compare same priorities (READ vs READ) with sortReadQueue = false: FIFO
+        // sequence number
         TestModbusTask readNoSort1 = new TestModbusTask(2, 5L, 2, 50, false);
         TestModbusTask readNoSort2 = new TestModbusTask(2, 15L, 1, 1000, false);
         assertTrue(readNoSort1.compareTo(readNoSort2) < 0, "When sorting is disabled, Read tasks must be FIFO ordered");
+    }
+
+    @Test
+    public void testMultipleReadWriteEncodingDecoding() {
+        // 1. Multiple INT16 decoding
+        int[] multiInt16Regs = new int[] { 10, 65516, 30 };
+        List<Object> decodedInt16 = ModbusDataConverter.decodeValues(multiInt16Regs, "INT16", "ABCD");
+        assertEquals(3, decodedInt16.size());
+        assertEquals((short) 10, decodedInt16.get(0));
+        assertEquals((short) -20, decodedInt16.get(1));
+        assertEquals((short) 30, decodedInt16.get(2));
+
+        // 2. Multiple INT16 encoding
+        List<Object> valuesToEncode = List.of(10, -20, 30);
+        int[] encodedInt16 = ModbusDataConverter.encodeValues(valuesToEncode, "INT16", "ABCD", 3);
+        assertArrayEquals(multiInt16Regs, encodedInt16);
+
+        // 3. Multiple FLOAT32 encoding & decoding
+        List<Object> floatsToEncode = List.of(1.23f, 4.56f);
+        int[] encodedFloats = ModbusDataConverter.encodeValues(floatsToEncode, "FLOAT32", "ABCD", 4);
+        assertEquals(4, encodedFloats.length);
+        List<Object> decodedFloats = ModbusDataConverter.decodeValues(encodedFloats, "FLOAT32", "ABCD");
+        assertEquals(2, decodedFloats.size());
+        assertEquals(1.23f, (float) decodedFloats.get(0), 0.001f);
+        assertEquals(4.56f, (float) decodedFloats.get(1), 0.001f);
     }
 }

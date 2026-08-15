@@ -1,0 +1,239 @@
+{
+    "id": "workspace-modbus-to-mqtt",
+    "enabled": true,
+    "resources": [
+        {
+            "id": "modbus-pool-local",
+            "type": "modbus-connection-pool",
+            "enabled": true,
+            "config": {
+                "name": "koneksi modbus local",
+                "host": "localhost",
+                "port": 502,
+                "timeout": 3000,
+                "interTransactionDelay": 20,
+                "writePriorityMode": "HIGH",
+                "reconnectDelay": 5000,
+                "keepAlive": true,
+                "sortReadQueue": true
+            }
+        },
+        {
+            "id": "mqtt-pool-hivemq",
+            "type": "mqtt-client-pool",
+            "enabled": true,
+            "config": {
+                "name": "koneksi mqtt hivemq",
+                "brokerUrl": "tcp://localhost:1883",
+                "keepAlive": 60,
+                "clientId": "nexa-modbus-mqtt-bridge",
+                "username": "",
+                "password": "",
+                "cleanSession": true,
+                "connectionTimeout": 30,
+                "automaticReconnect": true,
+                "publish": {
+                    "queue": {
+                        "enabled": true,
+                        "capacity": 10000,
+                        "overflowStrategy": "BLOCK"
+                    },
+                    "worker": {
+                        "threads": 5
+                    }
+                }
+            }
+        }
+    ],
+    "flows": [
+        {
+            "id": "modbus-mqtt-flow",
+            "name": "Modbus to MQTT Bridge",
+            "enabled": true,
+            "nodes": [
+                {
+                    "id": "modbus-in-1",
+                    "category": "INPUT",
+                    "type": "modbus-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "connectionPool": "koneksi modbus local",
+                        "unitId": 1,
+                        "readType": "HOLDING_REGISTERS",
+                        "address": 0,
+                        "quantity": 2,
+                        "pollInterval": "200ms",
+                        "dataType": "INT16",
+                        "endianness": "ABCD",
+                        "coalesce": true,
+                        "outputField": "payload.value",
+                        "timeout": 3000
+                    }
+                },
+                {
+                    "id": "mqtt-out-1",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt hivemq",
+                        "topic": "nexa/modbus/1"
+                    }
+                },
+                {
+                    "id": "modbus-in-2",
+                    "category": "INPUT",
+                    "type": "modbus-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "connectionPool": "koneksi modbus local",
+                        "unitId": 1,
+                        "readType": "HOLDING_REGISTERS",
+                        "address": 1,
+                        "quantity": 1,
+                        "pollInterval": "200ms",
+                        "dataType": "INT16",
+                        "endianness": "ABCD",
+                        "coalesce": true,
+                        "outputField": "payload.value",
+                        "timeout": 3000
+                    }
+                },
+                {
+                    "id": "mqtt-out-2",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt hivemq",
+                        "topic": "nexa/modbus/2"
+                    }
+                },
+                {
+                    "id": "modbus-in-3",
+                    "category": "INPUT",
+                    "type": "modbus-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "connectionPool": "koneksi modbus local",
+                        "unitId": 1,
+                        "readType": "HOLDING_REGISTERS",
+                        "address": 2,
+                        "quantity": 1,
+                        "pollInterval": "200ms",
+                        "dataType": "INT16",
+                        "endianness": "ABCD",
+                        "coalesce": true,
+                        "outputField": "payload.value",
+                        "timeout": 3000
+                    }
+                },
+                {
+                    "id": "mqtt-out-3",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt hivemq",
+                        "topic": "nexa/modbus/3"
+                    }
+                },
+                {
+                    "id": "modbus-in-4",
+                    "category": "INPUT",
+                    "type": "modbus-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "connectionPool": "koneksi modbus local",
+                        "unitId": 1,
+                        "readType": "HOLDING_REGISTERS",
+                        "address": 3,
+                        "quantity": 1,
+                        "pollInterval": "200ms",
+                        "dataType": "INT16",
+                        "endianness": "ABCD",
+                        "coalesce": true,
+                        "outputField": "payload.value",
+                        "timeout": 3000
+                    }
+                },
+                {
+                    "id": "mqtt-out-4",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt hivemq",
+                        "topic": "nexa/modbus/4"
+                    }
+                },
+                {
+                    "id": "modbus-in-5",
+                    "category": "INPUT",
+                    "type": "modbus-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "connectionPool": "koneksi modbus local",
+                        "unitId": 1,
+                        "readType": "HOLDING_REGISTERS",
+                        "address": 4,
+                        "quantity": 1,
+                        "pollInterval": "200ms",
+                        "dataType": "INT16",
+                        "endianness": "ABCD",
+                        "coalesce": true,
+                        "outputField": "payload.value",
+                        "timeout": 3000
+                    }
+                },
+                {
+                    "id": "mqtt-out-5",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt hivemq",
+                        "topic": "nexa/modbus/5"
+                    }
+                }
+            ],
+            "connections": [
+                {
+                    "id": "modbus-1-to-mqtt-1",
+                    "enabled": true,
+                    "sourceNodeId": "modbus-in-1",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-1"
+                },
+                {
+                    "id": "modbus-2-to-mqtt-2",
+                    "enabled": true,
+                    "sourceNodeId": "modbus-in-2",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-2"
+                },
+                {
+                    "id": "modbus-3-to-mqtt-3",
+                    "enabled": true,
+                    "sourceNodeId": "modbus-in-3",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-3"
+                },
+                {
+                    "id": "modbus-4-to-mqtt-4",
+                    "enabled": true,
+                    "sourceNodeId": "modbus-in-4",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-4"
+                },
+                {
+                    "id": "modbus-5-to-mqtt-5",
+                    "enabled": true,
+                    "sourceNodeId": "modbus-in-5",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-5"
+                }
+            ]
+        }
+    ]
+}

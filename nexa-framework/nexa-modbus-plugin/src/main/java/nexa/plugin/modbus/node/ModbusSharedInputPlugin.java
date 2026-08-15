@@ -120,16 +120,12 @@ public final class ModbusSharedInputPlugin implements NexaSourcePlugin {
                     Object decodedVal;
                     if ("COILS".equals(upperReadType) || "DISCRETE_INPUTS".equals(upperReadType)) {
                         boolean[] bits = (boolean[]) rawResult;
-                        if (quantity == 1) {
-                            decodedVal = bits[0];
-                        } else {
-                            List<Boolean> bitList = new ArrayList<>(bits.length);
-                            for (boolean b : bits) bitList.add(b);
-                            decodedVal = bitList;
-                        }
+                        List<Boolean> bitList = new ArrayList<>(bits.length);
+                        for (boolean b : bits) bitList.add(b);
+                        decodedVal = bitList;
                     } else {
                         int[] regs = (int[]) rawResult;
-                        decodedVal = ModbusDataConverter.decodeValue(regs, dataType, endianness);
+                        decodedVal = ModbusDataConverter.decodeValues(regs, dataType, endianness);
                     }
 
                     // Emit to Nexa pipeline

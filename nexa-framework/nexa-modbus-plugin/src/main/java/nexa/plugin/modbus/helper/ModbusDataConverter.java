@@ -322,4 +322,74 @@ public final class ModbusDataConverter {
             default -> toRawIntList(registers);
         };
     }
+
+    /**
+     * Helper to get register size of standard data types.
+     */
+    public static int getRegisterSize(String type) {
+        if (type == null) return 0;
+        String upperType = type.trim().toUpperCase();
+        return switch (upperType) {
+            case "INT16", "UINT16" -> 1;
+            case "INT32", "UINT32", "FLOAT32", "FLOAT" -> 2;
+            case "INT64", "LONG", "UINT64", "FLOAT64", "DOUBLE" -> 4;
+            default -> 0; // STRING, RAW_HEX, RAW_INT take the whole array
+        };
+    }
+
+    /**
+     * Decodes a register array as a List of typed values based on the data type register size.
+     * Always returns a List (even if quantity is 1).
+     */
+    public static List<Object> decodeValues(int[] registers, String type, String endianness) {
+        List<Object> list = new ArrayList<>();
+        if (registers == null || registers.length == 0) return list;
+
+        String upperType = type.trim().toUpperCase();
+        int regSize = getRegisterSize(upperType);
+
+        if (regSize <= 0 || registers.length < regSize) {
+            Object val = decodeValue(registers, type, endianness);
+            if (val != null) {
+                list.add(val);
+            }
+            return list;
+        }
+
+        for (int i = 0; i < registers.length; i += regSize) {
+            if (i + regSize > registers.length) break;
+            int[] subArray = new int[regSize];
+            System.arraycopy(registers, i, subArray, 0, regSize);
+            Object val = decodeValue(subArray, type, endianness);
+            if (val != null) {
+                list.add(val);
+            }
+        }
+        return list;
+    }
+
+    /**
+     * Encodes a value (which can be a single object or a List of objects) into a register array.
+     */
+    public static int[] encodeValues(Object value, String type, String endianness, int registerQty) {
+        if (value == null) return new int[registerQty];
+
+        String upperType = type.trim().toUpperCase();
+        int regSize = getRegisterSize(upperType);
+
+        if (value instanceof List<?> list) {
+            if (regSize <= 0) {
+                return encodeValue(value, type, endianness, registerQty);
+            }
+            int[] result = new int[list.size() * regSize];
+            for (int i = 0; i < list.size(); i++) {
+                int[] encodedItem = encodeValue(list.get(i), type, endianness, regSize);
+                System.arraycopy(encodedItem, 0, result, i * regSize, regSize);
+            }
+            return result;
+        } else {
+            return encodeValue(value, type, endianness, registerQty);
+        }
+    }
 }
+

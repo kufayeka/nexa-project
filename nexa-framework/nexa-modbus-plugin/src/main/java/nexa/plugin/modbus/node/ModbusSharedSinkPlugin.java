@@ -116,7 +116,7 @@ public final class ModbusSharedSinkPlugin implements NexaSinkPlugin {
                             });
                 }
                 case "MULTIPLE_REGISTERS" -> {
-                    int[] regs = ModbusDataConverter.encodeValue(rawValue, dataType, endianness, quantity);
+                    int[] regs = ModbusDataConverter.encodeValues(rawValue, dataType, endianness, quantity);
                     future = connection.submitWrite(unitId, address, regs.length,
                             master -> {
                                 master.writeMultipleRegisters(unitId, address, regs);
