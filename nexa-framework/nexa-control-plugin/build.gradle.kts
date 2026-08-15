@@ -9,6 +9,9 @@ repositories {
 
 dependencies {
     implementation(project(":nexa-api"))
+    // Compile-time only: used to expose the real workspace schema in OpenAPI.
+    // The runtime already provides nexa-core, so it must not be bundled into the control plugin JAR.
+    compileOnly(project(":nexa-core"))
     implementation("io.javalin:javalin:6.1.3")
     implementation("io.javalin.community.openapi:javalin-openapi-plugin:6.1.3")
     implementation("io.javalin.community.openapi:javalin-swagger-plugin:6.1.3")
