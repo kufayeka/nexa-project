@@ -24,29 +24,14 @@ import java.util.Map;
  * Compile-time OpenAPI contract for the Nexa Control REST API.
  *
  * <p>This class intentionally contains no HTTP implementation. Javalin's
- * annotation processor uses these signatures to generate the API contract,
+ * annotation processor uses these annotations to generate the API contract,
  * including request/response schemas used by Swagger UI and client generators.
  */
 final class ControlApiDocumentation {
-    private ControlApiDocumentation() {
-    }
-
-    private static OpenApiResponse error400() {
-        return new OpenApiResponse(status = "400", description = "The request is invalid.", content = @OpenApiContent(from = ErrorResponse.class));
-    }
-
-    private static OpenApiResponse error404() {
-        return new OpenApiResponse(status = "404", description = "The requested workspace, node, connection, or paused message does not exist.", content = @OpenApiContent(from = ErrorResponse.class));
-    }
-
-    private static OpenApiResponse error500() {
-        return new OpenApiResponse(status = "500", description = "The runtime failed while processing the request.", content = @OpenApiContent(from = ErrorResponse.class));
-    }
+    private ControlApiDocumentation() {}
 
     @OpenApi(path = "/api/workspace/load", methods = HttpMethod.POST,
-            summary = "Load and deploy a workspace",
-            operationId = "loadWorkspace",
-            tags = {"Workspace"},
+            summary = "Load and deploy a workspace", operationId = "loadWorkspace", tags = {"Workspace"},
             requestBody = @OpenApiRequestBody(description = "Complete workspace definition to validate, compile, deploy, and make available to the runtime.", content = @OpenApiContent(from = WorkspaceDefinition.class), required = true),
             responses = {
                     @OpenApiResponse(status = "200", description = "Workspace successfully loaded and deployed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -56,9 +41,7 @@ final class ControlApiDocumentation {
     static void loadWorkspace() {}
 
     @OpenApi(path = "/api/workspace/unload", methods = HttpMethod.POST,
-            summary = "Undeploy a workspace",
-            operationId = "unloadWorkspace",
-            tags = {"Workspace"},
+            summary = "Undeploy a workspace", operationId = "unloadWorkspace", tags = {"Workspace"},
             queryParams = @OpenApiParam(name = "workspaceId", required = true, description = "Unique workspace identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Workspace undeployed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -68,9 +51,7 @@ final class ControlApiDocumentation {
     static void unloadWorkspace() {}
 
     @OpenApi(path = "/api/workspace/enable", methods = HttpMethod.POST,
-            summary = "Enable a workspace",
-            operationId = "enableWorkspace",
-            tags = {"Workspace"},
+            summary = "Enable a workspace", operationId = "enableWorkspace", tags = {"Workspace"},
             queryParams = @OpenApiParam(name = "workspaceId", required = true, description = "Unique workspace identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Workspace enabled and its input activators started when the runtime is active.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -80,9 +61,7 @@ final class ControlApiDocumentation {
     static void enableWorkspace() {}
 
     @OpenApi(path = "/api/workspace/disable", methods = HttpMethod.POST,
-            summary = "Disable a workspace",
-            operationId = "disableWorkspace",
-            tags = {"Workspace"},
+            summary = "Disable a workspace", operationId = "disableWorkspace", tags = {"Workspace"},
             queryParams = @OpenApiParam(name = "workspaceId", required = true, description = "Unique workspace identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Workspace disabled and its active input routes stopped.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -92,9 +71,7 @@ final class ControlApiDocumentation {
     static void disableWorkspace() {}
 
     @OpenApi(path = "/api/workspace/list", methods = HttpMethod.GET,
-            summary = "List deployed workspaces",
-            operationId = "listWorkspaces",
-            tags = {"Workspace"},
+            summary = "List deployed workspaces", operationId = "listWorkspaces", tags = {"Workspace"},
             responses = {
                     @OpenApiResponse(status = "200", description = "Current workspace metadata, including enabled state and flow/node counts.", content = @OpenApiContent(from = WorkspaceListResponse.class)),
                     @OpenApiResponse(status = "500", description = "Runtime state could not be read.", content = @OpenApiContent(from = ErrorResponse.class))
@@ -102,9 +79,7 @@ final class ControlApiDocumentation {
     static void listWorkspaces() {}
 
     @OpenApi(path = "/api/workspace/{id}", methods = HttpMethod.GET,
-            summary = "Get workspace metadata",
-            operationId = "getWorkspaceInfo",
-            tags = {"Workspace"},
+            summary = "Get workspace metadata", operationId = "getWorkspaceInfo", tags = {"Workspace"},
             pathParams = @OpenApiParam(name = "id", required = true, description = "Unique workspace identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Workspace metadata.", content = @OpenApiContent(from = WorkspaceMetaInfo.class)),
@@ -114,9 +89,7 @@ final class ControlApiDocumentation {
     static void getWorkspaceInfo() {}
 
     @OpenApi(path = "/api/workspace/{id}/data", methods = HttpMethod.GET,
-            summary = "Get the original workspace JSON",
-            operationId = "getWorkspaceData",
-            tags = {"Workspace"},
+            summary = "Get the original workspace JSON", operationId = "getWorkspaceData", tags = {"Workspace"},
             pathParams = @OpenApiParam(name = "id", required = true, description = "Unique workspace identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "The exact workspace JSON submitted during load.", content = @OpenApiContent(from = String.class)),
@@ -126,9 +99,7 @@ final class ControlApiDocumentation {
     static void getWorkspaceData() {}
 
     @OpenApi(path = "/api/workspace/validate", methods = HttpMethod.POST,
-            summary = "Validate a workspace without deploying it",
-            operationId = "validateWorkspace",
-            tags = {"Workspace"},
+            summary = "Validate a workspace without deploying it", operationId = "validateWorkspace", tags = {"Workspace"},
             requestBody = @OpenApiRequestBody(description = "Workspace definition to validate. No runtime deployment is performed.", content = @OpenApiContent(from = WorkspaceDefinition.class), required = true),
             responses = {
                     @OpenApiResponse(status = "200", description = "Validation completed. The response contains validity, errors, and warnings.", content = @OpenApiContent(from = ValidationResult.class)),
@@ -138,9 +109,7 @@ final class ControlApiDocumentation {
     static void validateWorkspace() {}
 
     @OpenApi(path = "/api/workspace/validate-script", methods = HttpMethod.POST,
-            summary = "Validate node script source code",
-            operationId = "validateNodeScript",
-            tags = {"Workspace"},
+            summary = "Validate node script source code", operationId = "validateNodeScript", tags = {"Workspace"},
             queryParams = @OpenApiParam(name = "language", required = true, description = "Registered scripting language identifier, for example `nexa`."),
             requestBody = @OpenApiRequestBody(description = "Script source code as UTF-8 text.", content = @OpenApiContent(from = String.class), required = true),
             responses = {
@@ -151,9 +120,7 @@ final class ControlApiDocumentation {
     static void validateNodeScript() {}
 
     @OpenApi(path = "/api/node/enable", methods = HttpMethod.POST,
-            summary = "Enable a node",
-            operationId = "enableNode",
-            tags = {"Node"},
+            summary = "Enable a node", operationId = "enableNode", tags = {"Node"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Node enabled.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -163,9 +130,7 @@ final class ControlApiDocumentation {
     static void enableNode() {}
 
     @OpenApi(path = "/api/node/disable", methods = HttpMethod.POST,
-            summary = "Disable a node",
-            operationId = "disableNode",
-            tags = {"Node"},
+            summary = "Disable a node", operationId = "disableNode", tags = {"Node"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Node disabled.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -175,9 +140,7 @@ final class ControlApiDocumentation {
     static void disableNode() {}
 
     @OpenApi(path = "/api/node/{id}", methods = HttpMethod.GET,
-            summary = "Get node runtime information",
-            operationId = "getNodeInfo",
-            tags = {"Node"},
+            summary = "Get node runtime information", operationId = "getNodeInfo", tags = {"Node"},
             pathParams = @OpenApiParam(name = "id", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Node state and processing counters.", content = @OpenApiContent(from = NodeInfo.class)),
@@ -187,9 +150,7 @@ final class ControlApiDocumentation {
     static void getNodeInfo() {}
 
     @OpenApi(path = "/api/node/{id}/messages", methods = HttpMethod.GET,
-            summary = "Get node message history",
-            operationId = "getNodeMessages",
-            tags = {"Node"},
+            summary = "Get node message history", operationId = "getNodeMessages", tags = {"Node"},
             pathParams = @OpenApiParam(name = "id", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Incoming and outgoing messages retained by the node runtime.", content = @OpenApiContent(from = NodeMessageHistory.class)),
@@ -199,9 +160,7 @@ final class ControlApiDocumentation {
     static void getNodeMessages() {}
 
     @OpenApi(path = "/api/node/breakpoint/add", methods = HttpMethod.POST,
-            summary = "Add a breakpoint to a node",
-            operationId = "addNodeBreakpoint",
-            tags = {"Node Debugging"},
+            summary = "Add a breakpoint to a node", operationId = "addNodeBreakpoint", tags = {"Node Debugging"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Breakpoint added.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -211,9 +170,7 @@ final class ControlApiDocumentation {
     static void addBreakpoint() {}
 
     @OpenApi(path = "/api/node/breakpoint/remove", methods = HttpMethod.POST,
-            summary = "Remove a node breakpoint",
-            operationId = "removeNodeBreakpoint",
-            tags = {"Node Debugging"},
+            summary = "Remove a node breakpoint", operationId = "removeNodeBreakpoint", tags = {"Node Debugging"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Breakpoint removed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -223,9 +180,7 @@ final class ControlApiDocumentation {
     static void removeBreakpoint() {}
 
     @OpenApi(path = "/api/node/breakpoint/resume", methods = HttpMethod.POST,
-            summary = "Resume execution of a paused node",
-            operationId = "resumeNode",
-            tags = {"Node Debugging"},
+            summary = "Resume execution of a paused node", operationId = "resumeNode", tags = {"Node Debugging"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Paused node resumed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -235,9 +190,7 @@ final class ControlApiDocumentation {
     static void resumeNode() {}
 
     @OpenApi(path = "/api/node/breakpoint/step", methods = HttpMethod.POST,
-            summary = "Execute one step for a paused node",
-            operationId = "stepNode",
-            tags = {"Node Debugging"},
+            summary = "Execute one step for a paused node", operationId = "stepNode", tags = {"Node Debugging"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "One execution step completed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -247,9 +200,7 @@ final class ControlApiDocumentation {
     static void stepNode() {}
 
     @OpenApi(path = "/api/node/breakpoint/message/{id}", methods = HttpMethod.GET,
-            summary = "Get the message paused at a breakpoint",
-            operationId = "getPausedMessage",
-            tags = {"Node Debugging"},
+            summary = "Get the message paused at a breakpoint", operationId = "getPausedMessage", tags = {"Node Debugging"},
             pathParams = @OpenApiParam(name = "id", required = true, description = "Node identifier whose paused message should be returned."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Paused runtime message. The message is a dynamic JSON object whose top-level keys are application-defined.", content = @OpenApiContent(from = Map.class)),
@@ -259,9 +210,7 @@ final class ControlApiDocumentation {
     static void getPausedMessage() {}
 
     @OpenApi(path = "/api/connection/{id}", methods = HttpMethod.GET,
-            summary = "Get connection runtime information",
-            operationId = "getConnectionInfo",
-            tags = {"Connection"},
+            summary = "Get connection runtime information", operationId = "getConnectionInfo", tags = {"Connection"},
             pathParams = @OpenApiParam(name = "id", required = true, description = "Unique connection identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Connection endpoints, enabled state, and injected message count.", content = @OpenApiContent(from = ConnectionInfo.class)),
@@ -271,9 +220,7 @@ final class ControlApiDocumentation {
     static void getConnectionInfo() {}
 
     @OpenApi(path = "/api/connection/enable", methods = HttpMethod.POST,
-            summary = "Enable a connection",
-            operationId = "enableConnection",
-            tags = {"Connection"},
+            summary = "Enable a connection", operationId = "enableConnection", tags = {"Connection"},
             queryParams = @OpenApiParam(name = "connectionId", required = true, description = "Unique connection identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Connection enabled and routing refreshed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -283,9 +230,7 @@ final class ControlApiDocumentation {
     static void enableConnection() {}
 
     @OpenApi(path = "/api/connection/disable", methods = HttpMethod.POST,
-            summary = "Disable a connection",
-            operationId = "disableConnection",
-            tags = {"Connection"},
+            summary = "Disable a connection", operationId = "disableConnection", tags = {"Connection"},
             queryParams = @OpenApiParam(name = "connectionId", required = true, description = "Unique connection identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Connection disabled and routing refreshed.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -295,9 +240,7 @@ final class ControlApiDocumentation {
     static void disableConnection() {}
 
     @OpenApi(path = "/api/connection/inject", methods = HttpMethod.POST,
-            summary = "Inject a runtime message into a connection",
-            operationId = "injectMessage",
-            tags = {"Connection"},
+            summary = "Inject a runtime message into a connection", operationId = "injectMessage", tags = {"Connection"},
             queryParams = @OpenApiParam(name = "connectionId", required = true, description = "Unique connection identifier."),
             requestBody = @OpenApiRequestBody(description = "Dynamic runtime message. Every top-level JSON property becomes a message field; application-defined fields such as `topic` and `rawData` are allowed.", content = @OpenApiContent(from = Map.class), required = true),
             responses = {
@@ -310,9 +253,7 @@ final class ControlApiDocumentation {
     static void injectMessage() {}
 
     @OpenApi(path = "/api/runtime/status", methods = HttpMethod.GET,
-            summary = "Get runtime system status",
-            operationId = "getRuntimeStatus",
-            tags = {"Runtime"},
+            summary = "Get runtime system status", operationId = "getRuntimeStatus", tags = {"Runtime"},
             responses = {
                     @OpenApiResponse(status = "200", description = "Current JVM/runtime resource status and uptime.", content = @OpenApiContent(from = SystemStatus.class)),
                     @OpenApiResponse(status = "500", description = "Runtime status could not be collected.", content = @OpenApiContent(from = ErrorResponse.class))
@@ -320,9 +261,7 @@ final class ControlApiDocumentation {
     static void getRuntimeStatus() {}
 
     @OpenApi(path = "/api/runtime/shutdown", methods = HttpMethod.POST,
-            summary = "Request runtime shutdown",
-            operationId = "shutdownRuntime",
-            tags = {"Runtime"},
+            summary = "Request runtime shutdown", operationId = "shutdownRuntime", tags = {"Runtime"},
             responses = {
                     @OpenApiResponse(status = "200", description = "Shutdown sequence accepted. The runtime performs graceful shutdown asynchronously.", content = @OpenApiContent(from = ActionResponse.class)),
                     @OpenApiResponse(status = "500", description = "Shutdown could not be initiated.", content = @OpenApiContent(from = ErrorResponse.class))
@@ -330,9 +269,7 @@ final class ControlApiDocumentation {
     static void shutdownRuntime() {}
 
     @OpenApi(path = "/api/runtime/gc", methods = HttpMethod.POST,
-            summary = "Request JVM garbage collection",
-            operationId = "triggerGarbageCollection",
-            tags = {"Runtime"},
+            summary = "Request JVM garbage collection", operationId = "triggerGarbageCollection", tags = {"Runtime"},
             responses = {
                     @OpenApiResponse(status = "200", description = "Garbage collection request submitted to the JVM.", content = @OpenApiContent(from = ActionResponse.class)),
                     @OpenApiResponse(status = "500", description = "Garbage collection request failed.", content = @OpenApiContent(from = ErrorResponse.class))
@@ -340,9 +277,7 @@ final class ControlApiDocumentation {
     static void triggerGarbageCollection() {}
 
     @OpenApi(path = "/api/runtime/reload-plugins", methods = HttpMethod.POST,
-            summary = "Reload runtime plugins",
-            operationId = "reloadPlugins",
-            tags = {"Runtime"},
+            summary = "Reload runtime plugins", operationId = "reloadPlugins", tags = {"Runtime"},
             responses = {
                     @OpenApiResponse(status = "200", description = "Plugin reload requested.", content = @OpenApiContent(from = ActionResponse.class)),
                     @OpenApiResponse(status = "500", description = "Plugin reload failed.", content = @OpenApiContent(from = ErrorResponse.class))
@@ -350,9 +285,7 @@ final class ControlApiDocumentation {
     static void reloadPlugins() {}
 
     @OpenApi(path = "/api/runtime/metrics/reset/workspace", methods = HttpMethod.POST,
-            summary = "Reset workspace metrics",
-            operationId = "resetWorkspaceMetrics",
-            tags = {"Runtime Monitoring"},
+            summary = "Reset workspace metrics", operationId = "resetWorkspaceMetrics", tags = {"Runtime Monitoring"},
             queryParams = @OpenApiParam(name = "workspaceId", required = true, description = "Unique workspace identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Workspace metrics reset.", content = @OpenApiContent(from = ActionResponse.class)),
@@ -362,9 +295,7 @@ final class ControlApiDocumentation {
     static void resetWorkspaceMetrics() {}
 
     @OpenApi(path = "/api/runtime/metrics/reset/node", methods = HttpMethod.POST,
-            summary = "Reset node metrics",
-            operationId = "resetNodeMetrics",
-            tags = {"Runtime Monitoring"},
+            summary = "Reset node metrics", operationId = "resetNodeMetrics", tags = {"Runtime Monitoring"},
             queryParams = @OpenApiParam(name = "nodeId", required = true, description = "Unique node identifier."),
             responses = {
                     @OpenApiResponse(status = "200", description = "Node metrics reset.", content = @OpenApiContent(from = ActionResponse.class)),
