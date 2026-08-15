@@ -2,7 +2,6 @@ package nexa.framework.runtime.domain.execution.service;
 
 import nexa.framework.runtime.domain.execution.model.FlowRuntime;
 import nexa.framework.runtime.domain.execution.model.WorkspaceRuntime;
-
 import nexa.framework.runtime.api.OutputConsumer;
 import nexa.framework.runtime.api.RuntimeConfiguration;
 import nexa.framework.runtime.domain.deployment.model.CompiledNode;
@@ -27,7 +26,6 @@ public final class RuntimeExecutionService {
     private final RuntimeConfiguration configuration;
     private final ScheduledExecutorService scheduler;
     private final ExecutorService workerExecutor;
-
     private InputActivator inputActivator;
     private final ExecutionLifecycleManager lifecycleManager;
     private final NodeExecutor nodeExecutor;
@@ -42,16 +40,10 @@ public final class RuntimeExecutionService {
         this.scheduler = Executors.newScheduledThreadPool(2,
                 Thread.ofPlatform().daemon(true).name("nexa-scheduler-", 0).factory());
         this.workerExecutor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nexa-worker-", 0).factory());
-
         this.nodeExecutor = new NodeExecutor(outputConsumer, workerExecutor, this, nodeController, connectionController, eventBus);
         this.lifecycleManager = new ExecutionLifecycleManager(configuration, scheduler, this);
     }
 
-    /**
-     * Metode ini dipanggil setelah modul scheduler diinstansiasi di Composition
-     * Root
-     * untuk menghindari circular dependency.
-     */
     public void setInputActivator(InputActivator inputActivator) {
         this.inputActivator = inputActivator;
     }
@@ -80,7 +72,6 @@ public final class RuntimeExecutionService {
         if (!runtimeStarted.compareAndSet(false, true)) {
             return;
         }
-
         for (WorkspaceRuntime workspaceRuntime : workspaces.values()) {
             if (workspaceRuntime.enabled()) {
                 activateWorkspaceInputs(workspaceRuntime, runtimeStarted);
@@ -92,7 +83,6 @@ public final class RuntimeExecutionService {
         if (!runtimeStarted.compareAndSet(true, false)) {
             return;
         }
-
         for (WorkspaceRuntime workspaceRuntime : workspaces.values()) {
             stopWorkspaceRuntime(workspaceRuntime);
         }
@@ -188,7 +178,19 @@ public final class RuntimeExecutionService {
         return flowRuntime;
     }
 
-    public void injectMessage(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, String sourceNodeId, RuntimeMessage message) {
+    public void injectMessage(
+            WorkspaceRuntime workspaceRuntime,
+            FlowRuntime flowRuntime,
+            String sourceNodeId,
+            RuntimeMessage message) {
         lifecycleManager.injectMessage(workspaceRuntime, flowRuntime, sourceNodeId, message);
+    }
+
+    public void injectMessageIntoConnection(
+            WorkspaceRuntime workspaceRuntime,
+            FlowRuntime flowRuntime,
+            String connectionId,
+            RuntimeMessage message) {
+        lifecycleManager.injectMessageIntoConnection(workspaceRuntime, flowRuntime, connectionId, message);
     }
 }
