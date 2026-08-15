@@ -5,6 +5,7 @@
         {
             "id": "mqtt-pool-pabrik",
             "type": "mqtt-client-pool",
+            "enabled": true,
             "config": {
                 "name": "koneksi mqtt 1",
                 "brokerUrl": "tcp://broker.hivemq.com:1883",
@@ -14,6 +15,7 @@
         {
             "id": "mqtt-pool-pabrik-2",
             "type": "mqtt-client-pool",
+            "enabled": true,
             "config": {
                 "name": "koneksi mqtt 2",
                 "brokerUrl": "tcp://broker.hivemq.com:1883",
@@ -31,102 +33,91 @@
                     "id": "mqtt-in-1",
                     "category": "INPUT",
                     "type": "mqtt-shared-input",
+                    "enabled": true,
                     "config": {
                         "mqttClientPool": "koneksi mqtt 1",
                         "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-1",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 1; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-1",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/1"
                     }
                 },
                 {
                     "id": "mqtt-in-2",
                     "category": "INPUT",
                     "type": "mqtt-shared-input",
+                    "enabled": true,
                     "config": {
                         "mqttClientPool": "koneksi mqtt 1",
                         "topic": "nexa/mes/sensor/data"
                     }
                 },
                 {
-                    "id": "mqtt-in-3",
-                    "category": "INPUT",
-                    "type": "mqtt-shared-input",
-                    "config": {
-                        "mqttClientPool": "koneksi mqtt 1",
-                        "topic": "nexa/mes/sensor/data"
-                    }
-                },
-                {
-                    "id": "mqtt-in-4",
-                    "category": "INPUT",
-                    "type": "mqtt-shared-input",
-                    "config": {
-                        "mqttClientPool": "koneksi mqtt 1",
-                        "topic": "nexa/mes/sensor/data"
-                    }
-                },
-                {
-                    "id": "mqtt-in-5",
-                    "category": "INPUT",
-                    "type": "mqtt-shared-input",
-                    "config": {
-                        "mqttClientPool": "koneksi mqtt 1",
-                        "topic": "nexa/mes/sensor/data"
-                    }
-                },
-                {
-                    "id": "process-data-tengah",
+                    "id": "executor-2",
                     "category": "EXECUTOR",
                     "type": "script",
                     "language": "nexa",
+                    "enabled": true,
                     "config": {
-                        "script": "val raw = msg.payload.rawData; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 2; msg.payload.processedData = raw.toUpperCase(); send(msg);"
                     }
                 },
                 {
-                    "id": "mqtt-out",
+                    "id": "mqtt-out-2",
                     "category": "OUTPUT",
                     "type": "mqtt-shared-sink",
+                    "enabled": true,
                     "config": {
                         "mqttClientPool": "koneksi mqtt 2",
-                        "topic": "nexa/mes/sensor/processed"
+                        "topic": "nexa/mes/sensor/processed/2"
                     }
                 }
             ],
             "connections": [
                 {
                     "id": "7f4a2c91-8d63-4e17-b5a9-2c8f1d6e7034",
+                    "enabled": true,
                     "sourceNodeId": "mqtt-in-1",
                     "sourcePort": "default",
-                    "targetNodeId": "process-data-tengah"
+                    "targetNodeId": "executor-1"
                 },
                 {
                     "id": "c3e81954-6a27-4b90-9d15-f72c4a8e6310",
-                    "sourceNodeId": "mqtt-in-2",
+                    "enabled": true,
+                    "sourceNodeId": "executor-1",
                     "sourcePort": "default",
-                    "targetNodeId": "process-data-tengah"
+                    "targetNodeId": "mqtt-out-1"
                 },
                 {
                     "id": "a61d3f82-9c54-47e0-b128-5d7a9f36c204",
-                    "sourceNodeId": "mqtt-in-3",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-2",
                     "sourcePort": "default",
-                    "targetNodeId": "process-data-tengah"
+                    "targetNodeId": "executor-2"
                 },
                 {
                     "id": "e9257b40-3d18-4ac6-86f2-b91e5c7a2036",
-                    "sourceNodeId": "mqtt-in-4",
+                    "enabled": true,
+                    "sourceNodeId": "executor-2",
                     "sourcePort": "default",
-                    "targetNodeId": "process-data-tengah"
-                },
-                {
-                    "id": "4b8e2d67-f139-45a0-a6c4-73d9e51b820f",
-                    "sourceNodeId": "mqtt-in-5",
-                    "sourcePort": "default",
-                    "targetNodeId": "process-data-tengah"
-                },
-                {
-                    "id": "d572c906-1a43-4ef8-b637-9c25e8f041ab",
-                    "sourceNodeId": "process-data-tengah",
-                    "sourcePort": "default",
-                    "targetNodeId": "mqtt-out"
+                    "targetNodeId": "mqtt-out-2"
                 }
             ]
         }

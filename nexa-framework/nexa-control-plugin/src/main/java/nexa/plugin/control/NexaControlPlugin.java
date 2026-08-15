@@ -13,6 +13,7 @@ import nexa.framework.runtime.api.plugin.NexaPlugin;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import nexa.framework.runtime.api.model.RuntimeMessage;
 
+import java.util.Map;
 import java.util.Properties;
 
 public class NexaControlPlugin implements NexaPlugin, NexaControlService {
@@ -195,11 +196,19 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
 
         app.post("/api/connection/inject", ctx -> {
             String connectionId = ctx.queryParam("connectionId");
-            RuntimeMessage msg = mapper.readValue(ctx.body(), RuntimeMessage.class);
 
-            context.getConnectionControl().injectMessageIntoConnection(connectionId, msg);
+            Map<String, Object> data = mapper.readValue(
+                    ctx.body(),
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                    });
 
-            ctx.status(200).result("Message injected into connection: " + connectionId);
+            RuntimeMessage msg = new RuntimeMessage(data);
+
+            context.getConnectionControl()
+                    .injectMessageIntoConnection(connectionId, msg);
+
+            ctx.status(200)
+                    .result("Message injected into connection: " + connectionId);
         });
 
         // UNsED!

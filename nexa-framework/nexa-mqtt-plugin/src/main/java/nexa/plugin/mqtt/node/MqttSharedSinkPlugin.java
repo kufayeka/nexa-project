@@ -64,4 +64,5 @@ public final class MqttSharedSinkPlugin implements NexaSinkPlugin {
     @Override
     public void onStop() {
     }
+
 }
