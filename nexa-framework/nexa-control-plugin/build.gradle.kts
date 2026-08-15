@@ -10,6 +10,9 @@ repositories {
 dependencies {
     implementation(project(":nexa-api"))
     implementation("io.javalin:javalin:6.1.3")
+    implementation("io.javalin.community.openapi:javalin-openapi-plugin:6.1.3")
+    implementation("io.javalin.community.openapi:javalin-swagger-plugin:6.1.3")
+    annotationProcessor("io.javalin.community.openapi:openapi-annotation-processor:6.1.3")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0")
     implementation("io.moquette:moquette-broker:0.16")
     implementation("org.slf4j:slf4j-simple:2.0.12")
@@ -17,6 +20,6 @@ dependencies {
 
 tasks.shadowJar {
     archiveBaseName.set("nexa-control-plugin")
-    archiveClassifier.set("") 
+    archiveClassifier.set("")
     archiveVersion.set("")
 }
