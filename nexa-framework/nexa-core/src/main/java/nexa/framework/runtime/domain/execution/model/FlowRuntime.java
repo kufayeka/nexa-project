@@ -6,12 +6,12 @@ import nexa.framework.runtime.domain.scheduler.model.InputNodeRuntimeState;
 import nexa.framework.runtime.domain.statistics.service.FlowStatistics;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public final class FlowRuntime {
 
@@ -28,75 +28,51 @@ public final class FlowRuntime {
         this.inputStateByNodeId = new ConcurrentHashMap<>();
         this.activeExecutions = new ConcurrentHashMap<>();
         this.nodeRuntimeById = new ConcurrentHashMap<>();
+        this.targetsByNodeAndPort = new ConcurrentHashMap<>();
 
         for (CompiledNode node : compiledFlow.nodeById().values()) {
             nodeRuntimeById.put(node.id(), new NodeRuntime(node));
         }
-
-        ConcurrentMap<String, ConcurrentMap<String, List<NodeRuntime>>> resolvedTargets = new ConcurrentHashMap<>();
-        for (Map.Entry<String, Map<String, List<String>>> sourceEntry : compiledFlow.routesByNodeAndPort().entrySet()) {
-            ConcurrentMap<String, List<NodeRuntime>> resolvedByPort = new ConcurrentHashMap<>();
-            for (Map.Entry<String, List<String>> portEntry : sourceEntry.getValue().entrySet()) {
-                List<NodeRuntime> resolvedTargetsForPort = new ArrayList<>();
-                for (String targetNodeId : portEntry.getValue()) {
-                    NodeRuntime targetRuntime = nodeRuntimeById.get(targetNodeId);
-                    if (targetRuntime == null) {
-                        throw new IllegalStateException(
-                                "Target node " + targetNodeId + " is not available in flow " + compiledFlow.flowId());
-                    }
-                    resolvedTargetsForPort.add(targetRuntime);
-                }
-                resolvedByPort.put(portEntry.getKey(),
-                        new java.util.concurrent.CopyOnWriteArrayList<>(resolvedTargetsForPort));
-            }
-            resolvedTargets.put(sourceEntry.getKey(), resolvedByPort);
-        }
-        this.targetsByNodeAndPort = resolvedTargets;
+        refreshRoutes();
     }
 
-    public CompiledFlow compiledFlow() {
-        return compiledFlow;
-    }
-
-    public FlowStatistics statistics() {
-        return statistics;
-    }
-
-    public ConcurrentMap<String, InputNodeRuntimeState> inputStateByNodeId() {
-        return inputStateByNodeId;
-    }
-
-    public ConcurrentMap<UUID, ActiveExecution> activeExecutions() {
-        return activeExecutions;
-    }
-
-    public NodeRuntime nodeRuntime(String nodeId) {
-        return nodeRuntimeById.get(nodeId);
-    }
+    public CompiledFlow compiledFlow() { return compiledFlow; }
+    public FlowStatistics statistics() { return statistics; }
+    public ConcurrentMap<String, InputNodeRuntimeState> inputStateByNodeId() { return inputStateByNodeId; }
+    public ConcurrentMap<UUID, ActiveExecution> activeExecutions() { return activeExecutions; }
+    public NodeRuntime nodeRuntime(String nodeId) { return nodeRuntimeById.get(nodeId); }
 
     public List<NodeRuntime> targets(String sourceNodeId, String sourcePort) {
         Map<String, List<NodeRuntime>> byPort = targetsByNodeAndPort.get(sourceNodeId);
-        if (byPort == null) {
-            return List.of();
-        }
-
+        if (byPort == null) return List.of();
         List<NodeRuntime> targets = byPort.get(sourcePort);
-        if (targets != null) {
-            return targets;
-        }
+        return targets != null ? targets : byPort.getOrDefault("default", List.of());
+    }
 
-        return byPort.getOrDefault("default", List.of());
+    public synchronized void refreshRoutes() {
+        targetsByNodeAndPort.clear();
+        for (Map.Entry<String, Map<String, List<String>>> sourceEntry : compiledFlow.routesByNodeAndPort().entrySet()) {
+            ConcurrentMap<String, List<NodeRuntime>> resolvedByPort = new ConcurrentHashMap<>();
+            for (Map.Entry<String, List<String>> portEntry : sourceEntry.getValue().entrySet()) {
+                List<NodeRuntime> resolvedTargets = new CopyOnWriteArrayList<>();
+                for (String targetNodeId : portEntry.getValue()) {
+                    NodeRuntime targetRuntime = nodeRuntimeById.get(targetNodeId);
+                    if (targetRuntime == null) {
+                        throw new IllegalStateException("Target node " + targetNodeId + " is not available in flow " + compiledFlow.flowId());
+                    }
+                    resolvedTargets.add(targetRuntime);
+                }
+                resolvedByPort.put(portEntry.getKey(), resolvedTargets);
+            }
+            targetsByNodeAndPort.put(sourceEntry.getKey(), resolvedByPort);
+        }
     }
 
     public void addRoute(String sourceNodeId, String sourcePort, NodeRuntime targetRuntime) {
         targetsByNodeAndPort.computeIfAbsent(sourceNodeId, k -> new ConcurrentHashMap<>())
                 .compute(sourcePort, (port, list) -> {
-                    List<NodeRuntime> newList = list == null
-                            ? new java.util.concurrent.CopyOnWriteArrayList<>()
-                            : new java.util.concurrent.CopyOnWriteArrayList<>(list);
-                    if (!newList.contains(targetRuntime)) {
-                        newList.add(targetRuntime);
-                    }
+                    List<NodeRuntime> newList = list == null ? new CopyOnWriteArrayList<>() : new CopyOnWriteArrayList<>(list);
+                    if (!newList.contains(targetRuntime)) newList.add(targetRuntime);
                     return newList;
                 });
     }
@@ -105,7 +81,7 @@ public final class FlowRuntime {
         ConcurrentMap<String, List<NodeRuntime>> byPort = targetsByNodeAndPort.get(sourceNodeId);
         if (byPort != null) {
             byPort.computeIfPresent(sourcePort, (port, list) -> {
-                List<NodeRuntime> newList = new java.util.concurrent.CopyOnWriteArrayList<>(list);
+                List<NodeRuntime> newList = new CopyOnWriteArrayList<>(list);
                 newList.removeIf(node -> node.compiledNode().id().equals(targetNodeId));
                 return newList;
             });
@@ -114,25 +90,15 @@ public final class FlowRuntime {
 
     public boolean removeConnection(String connectionId) {
         var connection = compiledFlow.connection(connectionId);
-
-        if (connection == null) {
-            return false;
-        }
-
-        removeRoute(
-                connection.sourceNodeId(),
-                connection.sourcePort(),
-                connection.targetNodeId());
-
+        if (connection == null) return false;
+        removeRoute(connection.sourceNodeId(), connection.sourcePort(), connection.targetNodeId());
         return true;
     }
 
     public void refreshNodeRuntime(String nodeId) {
         CompiledNode updatedNode = compiledFlow.node(nodeId);
         NodeRuntime nodeRuntime = nodeRuntimeById.get(nodeId);
-        if (updatedNode == null || nodeRuntime == null) {
-            return;
-        }
+        if (updatedNode == null || nodeRuntime == null) return;
         nodeRuntime.setCompiledNode(updatedNode);
     }
 }
