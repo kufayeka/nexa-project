@@ -152,6 +152,8 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
         List<String> resIds = new ArrayList<>();
         if (workspaceDefinition.resources() != null) {
             for (ResourceDefinition resDef : workspaceDefinition.resources()) {
+                // A disabled resource is not initialized, registered, or started.
+                if (!resDef.enabled()) continue;
                 if (!PluginRegistry.hasPlugin(resDef.type())) continue;
                 try {
                     Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(resDef.type());
