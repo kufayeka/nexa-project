@@ -1,0 +1,199 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineSystem.cmake:233 (message)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      The system is: Windows - 6.2.9200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      1
+      MSBuild-Version 17.14.51+25f168cee f├╝r .NET Framework
+      Der Buildvorgang wurde am 22.07.2026 22:39:21 gestartet.
+      
+      Projekt "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" auf Knoten "1" (Standardziele).
+      PrepareForBuild:
+        Das Verzeichnis "Debug\\" wird erstellt.
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Das Verzeichnis "Debug\\CompilerIdCXX.tlog\\" wird erstellt.
+      InitializeBuildStatus:
+        "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" wird erstellt, da "AlwaysCreate" angegeben wurde.
+        Aktualisieren des Timestamps von "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+      LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      Die Erstellung des Projekts "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" ist abgeschlossen (Standardziele) -- FEHLER.
+      
+      Fehler beim Buildvorgang.
+      
+      "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" (Standardziel) (1) ->
+      (Link Ziel) -> 
+        LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      
+          0 Warnung(en)
+          1 Fehler
+      
+      Verstrichene Zeit 00:00:02.96
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      1
+      MSBuild-Version 17.14.51+25f168cee f├╝r .NET Framework
+      Der Buildvorgang wurde am 22.07.2026 22:39:24 gestartet.
+      
+      Projekt "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" auf Knoten "1" (Standardziele).
+      PrepareForBuild:
+        Das Verzeichnis "Debug\\" wird erstellt.
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Das Verzeichnis "Debug\\CompilerIdCXX.tlog\\" wird erstellt.
+      InitializeBuildStatus:
+        "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" wird erstellt, da "AlwaysCreate" angegeben wurde.
+        Aktualisieren des Timestamps von "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+      LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      Die Erstellung des Projekts "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" ist abgeschlossen (Standardziele) -- FEHLER.
+      
+      Fehler beim Buildvorgang.
+      
+      "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" (Standardziel) (1) ->
+      (Link Ziel) -> 
+        LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      
+          0 Warnung(en)
+          1 Fehler
+      
+      Verstrichene Zeit 00:00:02.43
+      
+      
+...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      1
+      MSBuild-Version 17.14.51+25f168cee f├╝r .NET Framework
+      Der Buildvorgang wurde am 22.07.2026 22:41:33 gestartet.
+      
+      Projekt "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" auf Knoten "1" (Standardziele).
+      PrepareForBuild:
+        Das Verzeichnis "Debug\\" wird erstellt.
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Das Verzeichnis "Debug\\CompilerIdCXX.tlog\\" wird erstellt.
+      InitializeBuildStatus:
+        "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" wird erstellt, da "AlwaysCreate" angegeben wurde.
+        Aktualisieren des Timestamps von "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+      LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      Die Erstellung des Projekts "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" ist abgeschlossen (Standardziele) -- FEHLER.
+      
+      Fehler beim Buildvorgang.
+      
+      "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" (Standardziel) (1) ->
+      (Link Ziel) -> 
+        LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      
+          0 Warnung(en)
+          1 Fehler
+      
+      Verstrichene Zeit 00:00:02.24
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/mingw64/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      1
+      MSBuild-Version 17.14.51+25f168cee f├╝r .NET Framework
+      Der Buildvorgang wurde am 22.07.2026 22:41:36 gestartet.
+      
+      Projekt "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" auf Knoten "1" (Standardziele).
+      PrepareForBuild:
+        Das Verzeichnis "Debug\\" wird erstellt.
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Das Verzeichnis "Debug\\CompilerIdCXX.tlog\\" wird erstellt.
+      InitializeBuildStatus:
+        "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" wird erstellt, da "AlwaysCreate" angegeben wurde.
+        Aktualisieren des Timestamps von "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+      LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      Die Erstellung des Projekts "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" ist abgeschlossen (Standardziele) -- FEHLER.
+      
+      Fehler beim Buildvorgang.
+      
+      "D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" (Standardziel) (1) ->
+      (Link Ziel) -> 
+        LINK : fatal error LNK1104: cannot open file 'ucrtd.lib' [D:\\DEV\\kufayeka\\nexa-designer\\windows\\build\\CMakeFiles\\3.28.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj]
+      
+          0 Warnung(en)
+          1 Fehler
+      
+      Verstrichene Zeit 00:00:02.11
+      
+      
+...
