@@ -80,7 +80,6 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             config.registerPlugin(new SwaggerPlugin());
         }).start(8080);
 
-        // --- Workspace Control ---
         app.post("/api/workspace/load", ctx -> {
             context.getWorkspaceControl().loadWorkspace(ctx.body());
             ctx.status(200).result("Workspace loaded");
@@ -104,9 +103,7 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             ctx.status(200).result("Workspace disabled: " + workspaceId);
         });
 
-        app.get("/api/workspace/list", ctx -> {
-            ctx.json(context.getWorkspaceControl().getWorkspacesInfo());
-        });
+        app.get("/api/workspace/list", ctx -> ctx.json(context.getWorkspaceControl().getWorkspacesInfo()));
 
         app.get("/api/workspace/{id}", ctx -> {
             String id = ctx.pathParam("id");
@@ -123,9 +120,7 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             }
         });
 
-        app.post("/api/workspace/validate", ctx -> {
-            ctx.json(context.getWorkspaceControl().validateWorkspace(ctx.body()));
-        });
+        app.post("/api/workspace/validate", ctx -> ctx.json(context.getWorkspaceControl().validateWorkspace(ctx.body())));
 
         app.post("/api/workspace/validate-script", ctx -> {
             String language = ctx.queryParam("language");
@@ -133,7 +128,6 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             ctx.json(context.getWorkspaceControl().validateNodeScript(language, script));
         });
 
-        // --- Node Control ---
         app.post("/api/node/enable", ctx -> {
             String nodeId = ctx.queryParam("nodeId");
             context.getNodeControl().enableNode(nodeId);
@@ -146,10 +140,7 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             ctx.status(200).result("Node disabled: " + nodeId);
         });
 
-        app.get("/api/node/{id}", ctx -> {
-            String id = ctx.pathParam("id");
-            ctx.json(context.getNodeControl().getNodeInfo(id));
-        });
+        app.get("/api/node/{id}", ctx -> ctx.json(context.getNodeControl().getNodeInfo(ctx.pathParam("id"))));
 
         app.post("/api/node/breakpoint/add", ctx -> {
             String nodeId = ctx.queryParam("nodeId");
@@ -175,53 +166,41 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
             ctx.status(200).result("Node stepped: " + nodeId);
         });
 
-        app.get("/api/node/breakpoint/message/{id}", ctx -> {
-            String id = ctx.pathParam("id");
-            ctx.json(context.getNodeControl().getPausedMessage(id));
-        });
+        app.get("/api/node/breakpoint/message/{id}", ctx -> ctx.json(context.getNodeControl().getPausedMessage(ctx.pathParam("id"))));
 
         // --- Connection Control ---
         app.post("/api/connection/enable", ctx -> {
-            String connectionId = ctx.queryParam("connectionId");
+            String connectionId = requireConnectionId(ctx);
             context.getConnectionControl().enableConnection(connectionId);
-            ctx.status(200).result("Connection enabled: " + connectionId);
+            ConnectionInfo info = context.getConnectionControl().getConnectionInfo(connectionId);
+            ctx.status(200).json(info);
         });
 
         app.post("/api/connection/disable", ctx -> {
-            String connectionId = ctx.queryParam("connectionId");
+            String connectionId = requireConnectionId(ctx);
             context.getConnectionControl().disableConnection(connectionId);
-            ctx.status(200).result("Connection disabled: " + connectionId);
+            ConnectionInfo info = context.getConnectionControl().getConnectionInfo(connectionId);
+            ctx.status(200).json(info);
+        });
+
+        app.get("/api/connection/{connectionId}", ctx -> {
+            String connectionId = requireConnectionId(ctx.pathParam("connectionId"));
+            ConnectionInfo info = context.getConnectionControl().getConnectionInfo(connectionId);
+            if (info == null) {
+                ctx.status(404).result("Connection not found: " + connectionId);
+                return;
+            }
+            ctx.json(info);
         });
 
         app.post("/api/connection/inject", ctx -> {
-            String connectionId = ctx.queryParam("connectionId");
+            String connectionId = requireConnectionId(ctx);
             RuntimeMessage msg = mapper.readValue(ctx.body(), RuntimeMessage.class);
-
             context.getConnectionControl().injectMessageIntoConnection(connectionId, msg);
-
             ctx.status(200).result("Message injected into connection: " + connectionId);
         });
 
-        // UNsED!
-        // app.post("/api/connection/add", ctx -> {
-        // String source = ctx.queryParam("source");
-        // String target = ctx.queryParam("target");
-        // context.getConnectionControl().addConnection(source, target);
-        // ctx.status(200).result("Connection added: " + source + " -> " + target);
-        // });
-
-        // UNsED!
-        // app.post("/api/connection/remove", ctx -> {
-        // String connectionId = ctx.queryParam("connectionId");
-        // context.getConnectionControl().removeConnection(connectionId);
-        // ctx.status(200).result(
-        // "Connection removed: " + connectionId);
-        // });
-
-        // --- Runtime Control & Monitoring ---
-        app.get("/api/runtime/status", ctx -> {
-            ctx.json(context.getRuntimeControl().getSystemStatus());
-        });
+        app.get("/api/runtime/status", ctx -> ctx.json(context.getRuntimeControl().getSystemStatus()));
 
         app.post("/api/runtime/shutdown", ctx -> {
             ctx.status(200).result("Shutdown triggered");
@@ -251,11 +230,24 @@ public class NexaControlPlugin implements NexaPlugin, NexaControlService {
         });
     }
 
+    private String requireConnectionId(io.javalin.http.Context ctx) {
+        return requireConnectionId(ctx.queryParam("connectionId"));
+    }
+
+    private String requireConnectionId(String connectionId) {
+        if (connectionId == null || connectionId.isBlank()) {
+            throw new IllegalArgumentException("Query parameter 'connectionId' is required");
+        }
+        return connectionId;
+    }
+
     @Override
     public void stop() {
-        if (app != null)
+        if (app != null) {
             app.stop();
-        if (mqttBroker != null)
+        }
+        if (mqttBroker != null) {
             mqttBroker.stopServer();
+        }
     }
 }
