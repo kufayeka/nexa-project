@@ -14,7 +14,6 @@ import nexa.framework.runtime.domain.scheduler.model.InputNodeRuntimeState;
 import nexa.framework.runtime.api.model.RuntimeMessage;
 import nexa.framework.runtime.domain.statistics.model.RuntimeStatisticsSnapshot;
 
-import java.time.Duration;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -111,11 +110,7 @@ public final class RuntimeExecutionService {
         if (inputActivator != null) inputActivator.activateWorkspaceInputs(workspaceRuntime, runtimeStarted);
     }
 
-    /**
-     * Disable new input without cancelling executions that are already in flight.
-     * This is used by graceful shutdown so downstream plugins remain available until
-     * all accepted messages have finished processing.
-     */
+    /** Disable new input while preserving in-flight executions for graceful shutdown. */
     public void disableWorkspaceRuntime(WorkspaceRuntime workspaceRuntime) {
         if (inputActivator != null) inputActivator.stopWorkspaceRuntime(workspaceRuntime);
     }
@@ -126,11 +121,11 @@ public final class RuntimeExecutionService {
     }
 
     /**
-     * Wait until all executions already accepted by the runtime have completed.
-     * No new executions should be accepted after the workspace has been disabled.
+     * Wait for all currently accepted executions to drain. New executions are blocked
+     * because shutdown disables every workspace before this method is called.
      */
-    public boolean awaitWorkspaceExecutions(ConcurrentMap<String, WorkspaceRuntime> workspaces, Duration timeout) {
-        long deadline = System.nanoTime() + timeout.toNanos();
+    public boolean awaitWorkspaceExecutions(ConcurrentMap<String, WorkspaceRuntime> workspaces) {
+        long deadline = System.nanoTime() + configuration.maxExecutionLifetime().toNanos();
         while (System.nanoTime() < deadline) {
             boolean running = false;
             for (WorkspaceRuntime workspace : workspaces.values()) {
