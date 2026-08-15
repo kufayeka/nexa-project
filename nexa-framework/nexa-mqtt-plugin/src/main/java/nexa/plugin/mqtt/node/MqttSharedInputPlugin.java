@@ -68,11 +68,11 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
     }
 
     private void handleMessage(String receivedTopic, MqttMessage mqttMessage) {
-        System.out.println(
-                "[MQTT Input Node] Received message on topic "
-                        + receivedTopic
-                        + " in node "
-                        + nodeId);
+        // System.out.println(
+        // "[MQTT Input Node] Received message on topic "
+        // + receivedTopic
+        // + " in node "
+        // + nodeId);
 
         RuntimeMessage nexaMsg = new RuntimeMessage();
         nexaMsg.writeValue("payload.rawData", new String(mqttMessage.getPayload()));
@@ -85,7 +85,8 @@ public final class MqttSharedInputPlugin implements NexaSourcePlugin {
 
     @Override
     public void onStop() {
-        if (!subscribed) return;
+        if (!subscribed)
+            return;
 
         try {
             MqttBrokerManager.unsubscribe(this.mqttClient, this.topic, this.nodeId);
