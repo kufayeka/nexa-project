@@ -8,9 +8,7 @@ import nexa.plugin.asset.resource.AssetManagerResourcePlugin;
 
 import java.util.Map;
 
-/**
- * Host bridge exposed only to the Asset Manager scripting environment.
- */
+/** Host bridge exposed only to the Asset Manager scripting environment. */
 public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
 
     @Override
@@ -30,14 +28,13 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                 throw new NexaScriptException("Asset Manager plugin belum aktif atau tidak dapat ditemukan.", line, column);
             }
 
-            AssetScriptingEngine engine = manager.getScriptingEngine();
+            AssetScriptingEngine engine = AssetScriptingEngine.forManager(manager);
 
             return switch (name) {
                 case "read" -> (NexaCallable) (runtime, arguments, callLine, callColumn) -> {
                     if (arguments.isEmpty()) {
                         throw new NexaScriptException("Method read() memerlukan 1 argumen path.", callLine, callColumn);
                     }
-
                     String path = resolvePath(engine, String.valueOf(arguments.getFirst()));
                     AssetScriptContext context = engine.currentContext();
                     if (context != null) {
@@ -49,7 +46,6 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                     if (arguments.isEmpty()) {
                         throw new NexaScriptException("Method readVTQ() memerlukan 1 argumen path.", callLine, callColumn);
                     }
-
                     String path = resolvePath(engine, String.valueOf(arguments.getFirst()));
                     AssetScriptContext context = engine.currentContext();
                     if (context != null) {
@@ -61,7 +57,6 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                     if (arguments.size() < 2) {
                         throw new NexaScriptException("Method write() memerlukan 2 argumen: path dan value.", callLine, callColumn);
                     }
-
                     String path = resolvePath(engine, String.valueOf(arguments.getFirst()));
                     return manager.write(path, arguments.get(1));
                 };
