@@ -1,13 +1,13 @@
 package nexa.plugin.asset.script;
 
+import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /** Per-execution state for an Asset Manager calculation script. */
 public final class AssetScriptContext {
     private final String attributePath;
     private final Self self;
-    private final Set<String> trackedReads = ConcurrentHashMap.newKeySet();
+    private final Set<String> trackedReads = new HashSet<>();
 
     public AssetScriptContext(
         String attributePath,
