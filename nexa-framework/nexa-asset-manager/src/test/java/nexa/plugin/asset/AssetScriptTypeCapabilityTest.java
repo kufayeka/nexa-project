@@ -57,7 +57,7 @@ final class AssetScriptTypeCapabilityTest {
         values.put(AssetDataType.FLOAT32, 12.5f);
         values.put(AssetDataType.FLOAT64, 123.456d);
         values.put(AssetDataType.STRING, "nexa");
-        values.put(AssetDataType.ARRAY, List.of(1, 2, 3));
+        values.put(AssetDataType.ARRAY, new java.util.ArrayList<>(List.of(1, 2, 3)));
         values.put(AssetDataType.OBJECT, new LinkedHashMap<>(Map.of("value", 42, "ok", true)));
 
         int index = 0;
