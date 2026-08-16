@@ -9,30 +9,29 @@ import nexa.framework.runtime.domain.scripting.internal.nexa.NexaTokenizer;
 import nexa.plugin.asset.resource.AssetManagerResourcePlugin;
 
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/**
- * Asset Manager-owned scripting engine.
- *
- * The engine owns compilation, compiled-script caching, and per-execution
- * context. It deliberately does not expose the generic runtime's scripting
- * state to the Asset Manager itself.
- */
+/** Asset Manager-owned scripting engine with per-manager compiled-script cache. */
 public final class AssetScriptingEngine {
-    private final AssetManagerResourcePlugin assetManager;
+    private static final Map<AssetManagerResourcePlugin, AssetScriptingEngine> ENGINES = new WeakHashMap<>();
+
+    public static synchronized AssetScriptingEngine forManager(AssetManagerResourcePlugin manager) {
+        return ENGINES.computeIfAbsent(manager, ignored -> new AssetScriptingEngine());
+    }
+
     private final ConcurrentMap<String, CompiledAssetScript> compiledScripts = new ConcurrentHashMap<>();
     private final ThreadLocal<AssetScriptContext> currentContext = new ThreadLocal<>();
 
-    public AssetScriptingEngine(AssetManagerResourcePlugin assetManager) {
-        this.assetManager = assetManager;
+    private AssetScriptingEngine() {
     }
 
     public CompiledAssetScript compile(String source) {
         if (source == null || source.isBlank()) {
             throw new IllegalArgumentException("Asset calculation script cannot be empty.");
         }
-
         return compiledScripts.computeIfAbsent(source, this::compileUncached);
     }
 
@@ -44,6 +43,7 @@ public final class AssetScriptingEngine {
     }
 
     public Object executeCalculation(
+        AssetManagerResourcePlugin manager,
         String script,
         String attributePath,
         Object currentValue,
@@ -64,9 +64,8 @@ public final class AssetScriptingEngine {
         try {
             ScriptExecutionControl control = new ScriptExecutionControl((port, msg) -> {});
             NexaRuntime runtime = new NexaRuntime(new RuntimeMessage(), control);
-
             Object result = executeProgram(runtime, compiled.program());
-            assetManager.registerDependencies(attributePath, context.trackedReads());
+            manager.registerDependencies(attributePath, context.trackedReads());
             return result;
         } catch (Exception e) {
             throw new RuntimeException(
@@ -86,7 +85,6 @@ public final class AssetScriptingEngine {
             if (!e.getClass().getSimpleName().equals("ReturnSignal")) {
                 throw e;
             }
-
             Method valueMethod = e.getClass().getDeclaredMethod("value");
             valueMethod.setAccessible(true);
             return valueMethod.invoke(e);
