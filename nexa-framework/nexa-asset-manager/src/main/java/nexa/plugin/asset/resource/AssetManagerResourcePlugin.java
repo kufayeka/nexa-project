@@ -28,7 +28,6 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
     private final ConcurrentHashMap<String, Attribute> flatAttributes = new ConcurrentHashMap<>();
     private final AssetScriptingEngine scriptingEngine = new AssetScriptingEngine(this);
 
-    // Dependency tracking
     private final ConcurrentHashMap<String, Set<String>> dependencies = new ConcurrentHashMap<>();
     private static final ThreadLocal<Set<String>> executionStack = ThreadLocal.withInitial(java.util.HashSet::new);
 
@@ -64,13 +63,21 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
             throw new IllegalArgumentException("Asset Manager requires 'configFile' parameter in its configuration.");
         }
         loadAssetWorkspace(configFilePath);
+
+        // Compile every calculation before the resource is allowed to start.
+        // A syntax error therefore prevents an invalid asset workspace from entering runtime.
+        for (Attribute attr : flatAttributes.values()) {
+            Attribute.CalculationConfig calculation = attr.getCalculationConfig();
+            if (calculation != null && calculation.script() != null && !calculation.script().isBlank()) {
+                scriptingEngine.precompile(attr.getPath(), calculation.script());
+            }
+        }
     }
 
     @Override
     public void onStart() throws Exception {
         activeInstance = this;
 
-        // 1. Group attributes by interval for scheduling
         Map<Long, List<Attribute>> intervalGroups = new java.util.HashMap<>();
         for (Attribute attr : flatAttributes.values()) {
             if (attr.getCalculationConfig() != null && "INTERVAL".equals(attr.getCalculationConfig().triggerType())) {
@@ -82,7 +89,6 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
             }
         }
 
-        // 2. Start tick scheduler using virtual threads
         if (!intervalGroups.isEmpty()) {
             scheduler = Executors.newScheduledThreadPool(1, Thread.ofVirtual().factory());
             for (Map.Entry<Long, List<Attribute>> entry : intervalGroups.entrySet()) {
@@ -102,7 +108,6 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
             }
         }
 
-        // 3. Perform first-time evaluation on virtual threads to initialize values and discover dependencies
         for (Attribute attr : flatAttributes.values()) {
             if (attr.getCalculationConfig() != null) {
                 String triggerType = attr.getCalculationConfig().triggerType();
@@ -138,31 +143,18 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         scriptingEngine.clearCompiledScripts();
     }
 
-    public Asset getRootAsset() {
-        return rootAsset;
-    }
-
-    public ConcurrentHashMap<String, AssetTemplate> getTemplates() {
-        return templates;
-    }
-
-    public ConcurrentHashMap<String, Attribute> getFlatAttributes() {
-        return flatAttributes;
-    }
+    public Asset getRootAsset() { return rootAsset; }
+    public ConcurrentHashMap<String, AssetTemplate> getTemplates() { return templates; }
+    public ConcurrentHashMap<String, Attribute> getFlatAttributes() { return flatAttributes; }
 
     public Object read(String attributePath) {
         Attribute attr = flatAttributes.get(normalizePath(attributePath));
-        if (attr == null) {
-            return null;
-        }
-        return attr.getValue();
+        return attr == null ? null : attr.getValue();
     }
 
     public Map<String, Object> readVTQ(String attributePath) {
         Attribute attr = flatAttributes.get(normalizePath(attributePath));
-        if (attr == null) {
-            return null;
-        }
+        if (attr == null) return null;
         Object val = attr.getValue();
         Object oldVal = attr.getOldValue();
         return Map.of(
@@ -175,9 +167,7 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
 
     public boolean write(String attributePath, Object value) {
         Attribute attr = flatAttributes.get(normalizePath(attributePath));
-        if (attr == null) {
-            return false;
-        }
+        if (attr == null) return false;
         if (scriptingEngine.isExecuting()) {
             throw new IllegalStateException("Direct write is prohibited inside attribute calculation scripts.");
         }
@@ -185,23 +175,13 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         Object finalVal = value;
         if (attr.getCalculationConfig() != null && "ON_WRITE".equals(attr.getCalculationConfig().triggerType())) {
             finalVal = scriptingEngine.executeCalculation(
-                attr.getCalculationConfig().script(),
-                attr.getPath(),
-                attr.getValue(),
-                attr.getOldValue(),
-                value
-            );
+                attr.getCalculationConfig().script(), attr.getPath(), attr.getValue(), attr.getOldValue(), value);
         }
 
         Object oldVal = attr.getValue();
         attr.updateValue(finalVal, "GOOD");
-
         notifyListeners(attr.getPath(), finalVal, oldVal, attr.getTimestamp(), attr.getQuality());
-
-        if (!java.util.Objects.equals(oldVal, finalVal)) {
-            triggerDependents(attr.getPath());
-        }
-
+        if (!java.util.Objects.equals(oldVal, finalVal)) triggerDependents(attr.getPath());
         return true;
     }
 
@@ -211,13 +191,10 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
             Object oldVal = attr.getValue();
             attr.updateValue(value, quality);
             notifyListeners(attr.getPath(), value, oldVal, attr.getTimestamp(), attr.getQuality());
-            if (!java.util.Objects.equals(oldVal, value)) {
-                triggerDependents(attr.getPath());
-            }
+            if (!java.util.Objects.equals(oldVal, value)) triggerDependents(attr.getPath());
         }
     }
 
-    // Listener Registry
     public interface AttributeListener {
         void onUpdate(String path, Object value, Object oldValue, long timestamp, String quality);
     }
@@ -230,20 +207,15 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
 
     public void unregisterListener(String path, AttributeListener listener) {
         List<AttributeListener> list = listeners.get(normalizePath(path));
-        if (list != null) {
-            list.remove(listener);
-        }
+        if (list != null) list.remove(listener);
     }
 
     private void notifyListeners(String path, Object value, Object oldValue, long timestamp, String quality) {
         List<AttributeListener> list = listeners.get(normalizePath(path));
         if (list != null) {
             for (AttributeListener l : list) {
-                try {
-                    l.onUpdate(path, value, oldValue, timestamp, quality);
-                } catch (Exception e) {
-                    System.err.println("Error notifying listener for " + path + ": " + e.getMessage());
-                }
+                try { l.onUpdate(path, value, oldValue, timestamp, quality); }
+                catch (Exception e) { System.err.println("Error notifying listener for " + path + ": " + e.getMessage()); }
             }
         }
     }
@@ -258,9 +230,7 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
     public void triggerDependents(String sourcePath) {
         String normSource = normalizePath(sourcePath);
         Set<String> deps = dependencies.get(normSource);
-        if (deps == null || deps.isEmpty()) {
-            return;
-        }
+        if (deps == null || deps.isEmpty()) return;
 
         Set<String> stack = executionStack.get();
         for (String depPath : deps) {
@@ -268,13 +238,9 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
                 System.err.println("[Asset Manager Cycle Error] Recalculation cycle detected for: " + depPath);
                 continue;
             }
-
             stack.add(depPath);
-            try {
-                recalculateAttribute(depPath);
-            } finally {
-                stack.remove(depPath);
-            }
+            try { recalculateAttribute(depPath); }
+            finally { stack.remove(depPath); }
         }
     }
 
@@ -284,46 +250,27 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
 
         Object oldVal = attr.getValue();
         Object calculated = scriptingEngine.executeCalculation(
-            attr.getCalculationConfig().script(),
-            attr.getPath(),
-            attr.getValue(),
-            attr.getOldValue(),
-            null
-        );
+            attr.getCalculationConfig().script(), attr.getPath(), attr.getValue(), attr.getOldValue(), null);
 
         attr.updateValue(calculated, "GOOD");
         notifyListeners(attr.getPath(), calculated, oldVal, attr.getTimestamp(), attr.getQuality());
-
-        if (!java.util.Objects.equals(oldVal, calculated)) {
-            triggerDependents(attributePath);
-        }
+        if (!java.util.Objects.equals(oldVal, calculated)) triggerDependents(attributePath);
     }
 
     private void loadAssetWorkspace(String filePath) throws Exception {
         File file = new File(filePath);
-        if (!file.exists()) {
-            file = new File("nexa-test/" + filePath);
-        }
-        if (!file.exists()) {
-            file = new File(System.getProperty("user.dir"), filePath);
-        }
-        if (!file.exists()) {
-            throw new FileNotFoundException("Asset workspace file tidak ditemukan: " + filePath);
-        }
+        if (!file.exists()) file = new File("nexa-test/" + filePath);
+        if (!file.exists()) file = new File(System.getProperty("user.dir"), filePath);
+        if (!file.exists()) throw new FileNotFoundException("Asset workspace file tidak ditemukan: " + filePath);
 
         ObjectMapper mapper = new ObjectMapper();
         AssetWorkspaceDto wsDto = mapper.readValue(file, AssetWorkspaceDto.class);
 
         if (wsDto.templates() != null) {
-            for (AssetTemplate t : wsDto.templates()) {
-                templates.put(t.name(), t);
-            }
+            for (AssetTemplate t : wsDto.templates()) templates.put(t.name(), t);
         }
-
         if (wsDto.assets() != null) {
-            for (AssetDto assetDto : wsDto.assets()) {
-                instantiateAssetDto("/", assetDto);
-            }
+            for (AssetDto assetDto : wsDto.assets()) instantiateAssetDto("/", assetDto);
         }
     }
 
@@ -331,7 +278,6 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         String name = dto.name();
         String path = parentPath.equals("/") ? "/" + name : parentPath + "/" + name;
         path = normalizePath(path);
-
         Asset asset = new Asset(name, path, dto.template());
 
         if (dto.template() != null) {
@@ -341,18 +287,14 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
                     String taName = substituteParams(ta.name(), dto.parameters());
                     String dataType = ta.dataType();
                     Object taVal = ta.value();
-                    if (taVal instanceof String strVal) {
-                        taVal = substituteParams(strVal, dto.parameters());
-                    }
+                    if (taVal instanceof String strVal) taVal = substituteParams(strVal, dto.parameters());
                     Attribute.CalculationConfig calcConfig = null;
                     if (ta.calculationConfig() != null) {
                         String triggerType = ta.calculationConfig().triggerType();
                         String intervalExpr = ta.calculationConfig().intervalExpr();
-                        String script = ta.calculationConfig().script();
-                        script = substituteParams(script, dto.parameters());
+                        String script = substituteParams(ta.calculationConfig().script(), dto.parameters());
                         calcConfig = new Attribute.CalculationConfig(triggerType, intervalExpr, script);
                     }
-
                     String attrPath = normalizePath(path + "/" + taName);
                     Attribute attr = new Attribute(taName, attrPath, dataType, taVal, calcConfig);
                     asset.getAttributes().put(taName, attr);
@@ -365,23 +307,18 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
             for (AttributeDto attrDto : dto.attributes()) {
                 String attrName = substituteParams(attrDto.name(), dto.parameters());
                 Object val = attrDto.value();
-                if (val instanceof String strVal) {
-                    val = substituteParams(strVal, dto.parameters());
-                }
+                if (val instanceof String strVal) val = substituteParams(strVal, dto.parameters());
                 Attribute.CalculationConfig calcConfig = null;
                 if (attrDto.calculationConfig() != null) {
                     String triggerType = attrDto.calculationConfig().triggerType();
                     String intervalExpr = attrDto.calculationConfig().intervalExpr();
-                    String script = attrDto.calculationConfig().script();
-                    script = substituteParams(script, dto.parameters());
+                    String script = substituteParams(attrDto.calculationConfig().script(), dto.parameters());
                     calcConfig = new Attribute.CalculationConfig(triggerType, intervalExpr, script);
                 }
 
                 Attribute existing = asset.getAttributes().get(attrName);
                 if (existing != null) {
-                    if (val != null) {
-                        existing.updateValue(val, "GOOD");
-                    }
+                    if (val != null) existing.updateValue(val, "GOOD");
                     if (calcConfig != null) {
                         String attrPath = normalizePath(path + "/" + attrName);
                         Attribute overridden = new Attribute(attrName, attrPath, existing.getDataType(), val != null ? val : existing.getValue(), calcConfig);
@@ -398,40 +335,29 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         }
 
         Asset parentAsset = findAssetByPath(parentPath);
-        if (parentAsset != null) {
-            parentAsset.getChildren().put(name, asset);
-        } else if (parentPath.equals("/")) {
-            rootAsset.getChildren().put(name, asset);
-        }
+        if (parentAsset != null) parentAsset.getChildren().put(name, asset);
+        else if (parentPath.equals("/")) rootAsset.getChildren().put(name, asset);
 
         if (dto.children() != null) {
-            for (AssetDto childDto : dto.children()) {
-                instantiateAssetDto(path, childDto);
-            }
+            for (AssetDto childDto : dto.children()) instantiateAssetDto(path, childDto);
         }
     }
 
     public Asset findAssetByPath(String path) {
         String normalized = normalizePath(path);
-        if (normalized.equals("/")) {
-            return rootAsset;
-        }
+        if (normalized.equals("/")) return rootAsset;
         String[] parts = normalized.split("/");
         Asset current = rootAsset;
         for (String part : parts) {
             if (part.isEmpty()) continue;
             current = current.getChildren().get(part);
-            if (current == null) {
-                return null;
-            }
+            if (current == null) return null;
         }
         return current;
     }
 
     private String substituteParams(String template, Map<String, Object> parameters) {
-        if (template == null || parameters == null || parameters.isEmpty()) {
-            return template;
-        }
+        if (template == null || parameters == null || parameters.isEmpty()) return template;
         String result = template;
         for (Map.Entry<String, Object> entry : parameters.entrySet()) {
             String placeholder = "${" + entry.getKey() + "}";
@@ -443,49 +369,28 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
     public static String normalizePath(String path) {
         if (path == null) return "/";
         String p = path.replace("\\", "/").trim();
-        if (!p.startsWith("/")) {
-            p = "/" + p;
-        }
-        while (p.length() > 1 && p.endsWith("/")) {
-            p = p.substring(0, p.length() - 1);
-        }
-        while (p.contains("//")) {
-            p = p.replace("//", "/");
-        }
+        if (!p.startsWith("/")) p = "/" + p;
+        while (p.length() > 1 && p.endsWith("/")) p = p.substring(0, p.length() - 1);
+        while (p.contains("//")) p = p.replace("//", "/");
         return p;
     }
 
     public static String resolvePath(String contextPath, String targetPath) {
-        if (targetPath.startsWith("/")) {
-            return normalizePath(targetPath);
-        }
-
+        if (targetPath.startsWith("/")) return normalizePath(targetPath);
         String[] contextParts = contextPath.split("/");
         List<String> parts = new ArrayList<>();
-        for (String part : contextParts) {
-            if (!part.isEmpty()) {
-                parts.add(part);
-            }
-        }
+        for (String part : contextParts) if (!part.isEmpty()) parts.add(part);
 
         String[] targetParts = targetPath.split("/");
         for (String targetPart : targetParts) {
-            if (targetPart.isEmpty() || targetPart.equals(".")) {
-                continue;
-            }
+            if (targetPart.isEmpty() || targetPart.equals(".")) continue;
             if (targetPart.equals("..")) {
-                if (!parts.isEmpty()) {
-                    parts.remove(parts.size() - 1);
-                }
-            } else {
-                parts.add(targetPart);
-            }
+                if (!parts.isEmpty()) parts.remove(parts.size() - 1);
+            } else parts.add(targetPart);
         }
 
         StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            sb.append("/").append(part);
-        }
+        for (String part : parts) sb.append("/").append(part);
         return normalizePath(sb.toString());
     }
 }
