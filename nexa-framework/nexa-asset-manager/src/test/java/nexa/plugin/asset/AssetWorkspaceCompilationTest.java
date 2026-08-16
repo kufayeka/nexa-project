@@ -54,7 +54,7 @@ final class AssetWorkspaceCompilationTest {
                   "name": "machine",
                   "attributes": [
                     {"name": "bad", "dataType": "INT32", "value": 1,
-                     "calculationConfig": {"triggerType": "ON_CHANGE", "script": "return ; ; ;"}}
+                     "calculationConfig": {"triggerType": "ON_CHANGE", "script": "return ("}}
                   ]
                 }
               ]
