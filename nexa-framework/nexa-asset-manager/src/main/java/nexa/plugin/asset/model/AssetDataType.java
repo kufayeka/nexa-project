@@ -50,7 +50,7 @@ public enum AssetDataType {
                     BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE));
             case FLOAT32 -> Float.valueOf(requireNumber(value).floatValue());
             case FLOAT64 -> Double.valueOf(requireNumber(value).doubleValue());
-            case STRING -> String.valueOf(value);
+            case STRING -> requireString(value);
             case ARRAY -> {
                 if (!(value instanceof List<?>)) {
                     throw typeError(value, "ARRAY");
@@ -69,6 +69,11 @@ public enum AssetDataType {
     private static Boolean requireBoolean(Object value) {
         if (value instanceof Boolean b) return b;
         throw typeError(value, "BOOLEAN");
+    }
+
+    private static String requireString(Object value) {
+        if (value instanceof String s) return s;
+        throw typeError(value, "STRING");
     }
 
     private static Number requireNumber(Object value) {
