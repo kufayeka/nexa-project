@@ -75,7 +75,7 @@ final class AssetScriptTypeCapabilityTest {
                 case INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32 ->
                     "assetManager.write(\"../target" + suffix + "\", self.value + 1); return self.value + 1;";
                 case UINT64 ->
-                    "assetManager.write(\"../target" + suffix + "\", self.value); return self.value.toString();";
+                    "assetManager.write(\"../target" + suffix + "\", UInt64.add(self.value, 1)); return UInt64.add(self.value, 1);";
                 case FLOAT32, FLOAT64 ->
                     "assetManager.write(\"../target" + suffix + "\", self.value * 2); return self.value * 2;";
                 case STRING ->
@@ -101,7 +101,7 @@ final class AssetScriptTypeCapabilityTest {
                 case UINT8 -> assertEquals(201, targetValue);
                 case UINT16 -> assertEquals(60001, targetValue);
                 case UINT32 -> assertEquals(4_000_000_001L, targetValue);
-                case UINT64 -> assertEquals(values.get(AssetDataType.UINT64), targetValue);
+                case UINT64 -> assertEquals(BigInteger.ONE.shiftLeft(64).subtract(BigInteger.valueOf(4)), targetValue);
                 case FLOAT32 -> assertEquals(25.0f, (Float) targetValue, 0.0001f);
                 case FLOAT64 -> assertEquals(246.912d, (Double) targetValue, 0.0000001d);
                 case STRING -> assertEquals("NEXA", targetValue);
