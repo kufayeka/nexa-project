@@ -10,12 +10,12 @@ import java.util.List;
 import java.util.Map;
 
 /** Low-level AST -> bytecode lowering. Kept beside the AST because the AST is intentionally package-private. */
-final class NexaBytecodeCompilerInternal {
+public final class NexaBytecodeCompilerInternal {
     private final List<NexaBytecodeInstruction> code = new ArrayList<>();
     private final List<Object> constants = new ArrayList<>();
     private final Map<String, Integer> locals = new HashMap<>();
 
-    NexaBytecodeProgram compile(String sourceName, String source) {
+    public NexaBytecodeProgram compile(String sourceName, String source) {
         NexaProgram program = new NexaParser(new NexaTokenizer(source).tokenize()).parseProgram();
         for (NexaStatement statement : program.statements()) compileStatement(statement);
         if (code.isEmpty() || code.get(code.size() - 1).opcode() != NexaBytecodeOpcode.RETURN) {
