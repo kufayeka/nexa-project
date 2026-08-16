@@ -211,18 +211,29 @@ public final class NexaSemanticChecker {
         }
 
         if (expression instanceof Call call) {
-            // Calls are intentionally split into two semantic classes:
+            // Calls can target either a source-language value or an unresolved
+            // host capability. Host capabilities intentionally cross the
+            // semantic boundary here and are resolved by the runtime/plugin
+            // registry later.
             //
-            // 1. A normal call whose target is a known value/expression.
-            // 2. A symbolic host capability such as mqtt.publish(...).
+            // Examples:
+            //   someFunction(10)
+            //   mqtt.publish(topic, payload)
+            //   opcua.client.read(nodeId)
             //
-            // The latter must NOT resolve `mqtt` as a source-language variable.
-            // The plugin/host registry owns that namespace and resolves it later.
+            // A declared source variable is still checked normally:
+            //   client.publish(...)
+            //   input.client.publish(...)
             if (!isDynamicHostCallTarget(call.target())) {
                 expr(call.target());
             }
 
-            for (Expr argument : call.args()) expr(argument);
+            for (Expr argument : call.args()) {
+                expr(argument);
+            }
+
+            // Function signatures are resolved by the host/function registry
+            // in the later compilation/runtime phase.
             return NexaType.OBJECT;
         }
 
@@ -230,25 +241,36 @@ public final class NexaSemanticChecker {
     }
 
     /**
-     * Returns true only for a dotted symbolic call whose root is not a source
-     * variable. This keeps normal typed calls strict while allowing unresolved
-     * plugin namespaces to cross the host capability boundary.
+     * Determines whether a call target belongs to the unresolved host
+     * capability namespace rather than the source-language symbol table.
      *
-     * Examples accepted dynamically:
+     * The important distinction is that this method is evaluated only for a
+     * Call target. An unknown identifier used anywhere else is still a normal
+     * semantic error.
+     *
+     * Accepted dynamic forms:
+     *   foo(...)
      *   mqtt.publish(...)
      *   opcua.client.read(...)
      *
-     * Examples still checked normally:
-     *   client.publish(...)    // if `client` is declared
-     *   input.client.publish(...) // `input` is a declared dynamic object
+     * Still checked as source expressions:
+     *   client.publish(...)       // `client` is declared
+     *   input.client.publish(...) // `input` is declared
      */
     private boolean isDynamicHostCallTarget(Expr target) {
-        if (!(target instanceof Field)) return false;
-
         Expr root = target;
-        while (root instanceof Field field) root = field.target();
 
-        if (!(root instanceof Var variable)) return false;
+        while (root instanceof Field field) {
+            root = field.target();
+        }
+
+        if (!(root instanceof Var variable)) {
+            return false;
+        }
+
+        // Any unresolved root is a symbolic capability/function name when it
+        // appears as a call target. This deliberately does NOT make unknown
+        // variables generally valid; only the Call expression gets this rule.
         return lookupSymbol(variable.name()) == null;
     }
 
