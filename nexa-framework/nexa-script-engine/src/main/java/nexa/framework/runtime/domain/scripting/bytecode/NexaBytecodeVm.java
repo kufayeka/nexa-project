@@ -1,7 +1,6 @@
 package nexa.framework.runtime.domain.scripting.bytecode;
 
 import java.util.ArrayList;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +21,7 @@ public final class NexaBytecodeVm {
                 case LOAD_LOCAL -> stack.push(locals[(Integer) instruction.operands().get(0)]);
                 case STORE_LOCAL -> locals[(Integer) instruction.operands().get(0)] = stack.pop();
                 case LOAD_GLOBAL -> stack.push(context.global((String) instruction.operands().get(0)));
-                case LOAD_PROPERTY -> {
-                    String property = (String) instruction.operands().get(0);
-                    stack.push(readProperty(stack.pop(), property));
-                }
+                case LOAD_PROPERTY -> stack.push(readProperty(stack.pop(), (String) instruction.operands().get(0)));
                 case STORE_PROPERTY -> {
                     String property = (String) instruction.operands().get(0);
                     Object value = stack.pop();
@@ -81,16 +77,8 @@ public final class NexaBytecodeVm {
                         default -> stack.push(c >= 0);
                     }
                 }
-                case AND -> {
-                    boolean right = truthy(stack.pop());
-                    boolean left = truthy(stack.pop());
-                    stack.push(left && right);
-                }
-                case OR -> {
-                    boolean right = truthy(stack.pop());
-                    boolean left = truthy(stack.pop());
-                    stack.push(left || right);
-                }
+                case AND -> stack.push(truthy(stack.pop()) && truthy(stack.pop()));
+                case OR -> stack.push(truthy(stack.pop()) || truthy(stack.pop()));
                 case JUMP -> pc = (Integer) instruction.operands().get(0);
                 case JUMP_IF_FALSE -> {
                     Object value = stack.pop();
