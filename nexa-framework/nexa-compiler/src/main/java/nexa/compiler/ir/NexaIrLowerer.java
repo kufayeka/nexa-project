@@ -9,9 +9,7 @@ import nexa.compiler.lang.SourceSpan;
 
 /**
  * Lowers the current typed AST into a backend-neutral Nexa IR.
- *
- * Plugin/host calls are represented symbolically as HostCall. The compiler
- * never links against a plugin implementation.
+ * Plugin/host calls remain symbolic and are resolved only by the runtime.
  */
 public final class NexaIrLowerer {
     private static final int IR_VERSION = 1;
@@ -30,29 +28,22 @@ public final class NexaIrLowerer {
         Objects.requireNonNull(program, "program");
         reset();
         registerBuiltins();
-
         switchTo(allocateBlock());
         for (Stmt stmt : program.statements()) statement(stmt);
-
         finishCurrentBlock(program.statements().isEmpty()
                 ? new SourceSpan(0, 0)
                 : program.statements().get(program.statements().size() - 1).span());
 
-        NexaIr.Function main = new NexaIr.Function(
-                "main", localList, blocks, NexaType.VOID, List.of());
-
+        NexaIr.Function main = new NexaIr.Function("main", localList, blocks, NexaType.VOID, List.of());
         return new NexaIr.Program("nexa.program", List.of(main), types, IR_VERSION);
     }
 
     private void registerBuiltins() {
         for (NexaType t : List.of(
-                NexaType.BOOLEAN, NexaType.INT8, NexaType.INT16,
-                NexaType.INT32, NexaType.INT64, NexaType.UINT8,
-                NexaType.UINT16, NexaType.UINT32, NexaType.UINT64,
-                NexaType.FLOAT32, NexaType.FLOAT64, NexaType.STRING,
-                NexaType.OBJECT, NexaType.VOID)) {
-            types.put(t.displayName(), t);
-        }
+                NexaType.BOOLEAN, NexaType.INT8, NexaType.INT16, NexaType.INT32,
+                NexaType.INT64, NexaType.UINT8, NexaType.UINT16, NexaType.UINT32,
+                NexaType.UINT64, NexaType.FLOAT32, NexaType.FLOAT64, NexaType.STRING,
+                NexaType.OBJECT, NexaType.VOID)) types.put(t.displayName(), t);
     }
 
     private void reset() {
@@ -69,46 +60,34 @@ public final class NexaIrLowerer {
 
     private void statement(Stmt stmt) {
         if (terminated) return;
-
         if (stmt instanceof TypeDecl typeDecl) {
             types.put(typeDecl.name(), resolve(typeDecl.type()));
             return;
         }
-
         if (stmt instanceof Let let) {
             NexaType type = resolve(let.type());
             NexaIr.Local local = new NexaIr.Local(let.name(), type, let.constant());
             locals.put(let.name(), local);
             localList.add(local);
-
-            // Preserve the frontend's contextual type information in IR.
-            // In particular, integer literals default to INT64, but a typed
-            // declaration such as ARRAY<INT32> supplies the required element
-            // type to its literal initializer. No runtime cast is needed for
-            // a compile-time constant that is already known to fit.
             NexaIr.Value value = expression(let.init(), type);
             emit(new NexaIr.StoreLocal(null, let.name(), value, let.constant(), let.span()));
             return;
         }
-
         if (stmt instanceof Assign assign) {
             NexaIr.Value value = expression(assign.value());
             store(assign.target(), value, assign.span());
             return;
         }
-
         if (stmt instanceof Return ret) {
             NexaIr.Value value = ret.value() == null ? null : expression(ret.value());
             emit(new NexaIr.Return(null, value, ret.span()));
             terminate(new NexaIr.Stop(ret.span()));
             return;
         }
-
         if (stmt instanceof ExprStmt exprStmt) {
             expression(exprStmt.expr());
             return;
         }
-
         if (stmt instanceof For loop) lowerFor(loop);
     }
 
@@ -144,7 +123,6 @@ public final class NexaIrLowerer {
 
         if (previous == null) locals.remove(loop.name());
         else locals.put(loop.name(), previous);
-
         switchTo(exit);
     }
 
@@ -152,7 +130,7 @@ public final class NexaIrLowerer {
         return expression(expr, null);
     }
 
-    /** Lowers an expression with an optional contextual expected type. */
+    /** Lowers an expression with contextual expected type information. */
     private NexaIr.Value expression(Expr expr, NexaType expectedType) {
         if (expr instanceof Literal literal) {
             NexaType literalType = resolve(literal.type());
@@ -188,45 +166,54 @@ public final class NexaIrLowerer {
         }
 
         if (expr instanceof Array array) {
-            NexaType expectedElement = expectedArrayElement(expectedType);
+            NexaType expectedArray = expectedType == null ? null : resolve(expectedType);
+            NexaType expectedElement = expectedArrayElement(expectedArray);
             List<NexaIr.Value> values = new ArrayList<>();
-            NexaType elementType = expectedElement == null ? NexaType.OBJECT : expectedElement;
+            NexaType elementType = expectedElement;
 
             for (Expr item : array.values()) {
                 NexaIr.Value itemValue = expression(item, expectedElement);
                 values.add(itemValue);
-                if (expectedElement == null) {
-                    if (NexaType.same(elementType, NexaType.OBJECT)) {
-                        elementType = itemValue.type();
-                    } else {
-                        elementType = common(elementType, itemValue.type());
-                    }
+                if (elementType == null) {
+                    elementType = values.size() == 1
+                            ? itemValue.type()
+                            : common(elementType, itemValue.type());
                 }
             }
 
-            if (expectedElement == null && values.isEmpty()) {
-                elementType = NexaType.OBJECT;
-            }
+            if (elementType == null) elementType = NexaType.OBJECT;
 
-            NexaIr.Value result = value(new NexaType.Array(elementType));
-            emit(new NexaIr.ArrayCreate(result, values, elementType, array.span()));
+            // If a declaration supplies ARRAY<T>, preserve that exact type in
+            // the IR. This is the important contextual-typing boundary between
+            // frontend literals and typed storage.
+            NexaType resultType = expectedArray instanceof NexaType.Array
+                    ? expectedArray
+                    : new NexaType.Array(elementType);
+            NexaType actualElementType = resultType instanceof NexaType.Array a
+                    ? resolve(a.element())
+                    : elementType;
+
+            NexaIr.Value result = value(resultType);
+            emit(new NexaIr.ArrayCreate(result, values, actualElementType, array.span()));
             return result;
         }
 
         if (expr instanceof ObjectLit objectLit) {
+            NexaType expected = expectedType == null ? null : resolve(expectedType);
+            NexaType.ObjectType expectedObject = expected instanceof NexaType.ObjectType o ? o : null;
             Map<String, NexaIr.Value> fields = new LinkedHashMap<>();
             Map<String, NexaType> fieldTypes = new LinkedHashMap<>();
-            NexaType.ObjectType expectedObject = expectedType instanceof NexaType.ObjectType o ? o : null;
 
             for (var entry : objectLit.fields().entrySet()) {
-                NexaType fieldExpected = expectedObject == null
-                        ? null
-                        : expectedObject.fields().get(entry.getKey());
+                NexaType fieldExpected = expectedObject == null ? null : expectedObject.fields().get(entry.getKey());
                 NexaIr.Value fieldValue = expression(entry.getValue(), fieldExpected);
                 fields.put(entry.getKey(), fieldValue);
                 fieldTypes.put(entry.getKey(), fieldValue.type());
             }
-            NexaType.ObjectType objectType = new NexaType.ObjectType(fieldTypes);
+
+            NexaType.ObjectType objectType = expectedObject != null
+                    ? expectedObject
+                    : new NexaType.ObjectType(fieldTypes);
             NexaIr.Value result = value(objectType);
             emit(new NexaIr.ObjectCreate(result, fields, objectType, objectLit.span()));
             return result;
@@ -255,7 +242,6 @@ public final class NexaIrLowerer {
         if (expr instanceof Call call) {
             List<NexaIr.Value> args = call.args().stream().map(this::expression).toList();
             String target = symbolicTarget(call.target());
-
             if (target != null && call.target() instanceof Field) {
                 int separator = target.lastIndexOf('.');
                 String namespace = target.substring(0, separator);
@@ -267,7 +253,6 @@ public final class NexaIrLowerer {
                 emit(new NexaIr.HostCall(result, capability, signature, args, call.span()));
                 return result;
             }
-
             NexaIr.Value result = value(NexaType.OBJECT);
             emit(new NexaIr.Call(result, target == null ? "<dynamic>" : target, args, call.span()));
             return result;
@@ -280,23 +265,13 @@ public final class NexaIrLowerer {
         if (expectedType == null) return literalType;
         expectedType = resolve(expectedType);
         literalType = resolve(literalType);
-
         if (NexaType.same(expectedType, literalType)) return expectedType;
-
-        // Integer/float literals are represented by their default frontend
-        // type, but the semantic checker has already proved constant narrowing
-        // is safe. Carry that declared type into the IR so stores remain typed.
-        if (NexaType.numeric(expectedType) && NexaType.numeric(literalType)
-                && literal.value() instanceof Number) {
-            return expectedType;
-        }
-
+        if (NexaType.numeric(expectedType) && NexaType.numeric(literalType) && literal.value() instanceof Number) return expectedType;
         return literalType;
     }
 
     private NexaType expectedArrayElement(NexaType expectedType) {
         if (expectedType == null) return null;
-        expectedType = resolve(expectedType);
         return expectedType instanceof NexaType.Array array ? resolve(array.element()) : null;
     }
 
@@ -332,9 +307,7 @@ public final class NexaIrLowerer {
 
     private NexaType fieldType(NexaType target, String field) {
         target = resolve(target);
-        if (target instanceof NexaType.ObjectType object) {
-            return resolve(object.fields().getOrDefault(field, NexaType.OBJECT));
-        }
+        if (target instanceof NexaType.ObjectType object) return resolve(object.fields().getOrDefault(field, NexaType.OBJECT));
         return NexaType.OBJECT;
     }
 
@@ -345,6 +318,7 @@ public final class NexaIrLowerer {
     }
 
     private NexaType common(NexaType a, NexaType b) {
+        if (a == null) return b;
         if (NexaType.same(a, b)) return a;
         if (!NexaType.numeric(a) || !NexaType.numeric(b)) return NexaType.OBJECT;
         return rank(a) >= rank(b) ? a : b;
@@ -381,18 +355,11 @@ public final class NexaIrLowerer {
         return new NexaIr.Value(nextValue++, resolve(type));
     }
 
-    private void emit(NexaIr.Instruction instruction) {
-        instructions.add(instruction);
-    }
-
-    private int allocateBlock() {
-        return nextBlock++;
-    }
+    private void emit(NexaIr.Instruction instruction) { instructions.add(instruction); }
+    private int allocateBlock() { return nextBlock++; }
 
     private void switchTo(int block) {
-        if (currentBlock >= 0 && !terminated) {
-            flushCurrentBlock(new NexaIr.Stop(new SourceSpan(0, 0)));
-        }
+        if (currentBlock >= 0 && !terminated) flushCurrentBlock(new NexaIr.Stop(new SourceSpan(0, 0)));
         currentBlock = block;
         instructions.clear();
         terminated = false;
