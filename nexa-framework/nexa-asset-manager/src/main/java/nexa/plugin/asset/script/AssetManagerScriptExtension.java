@@ -62,7 +62,8 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                     if (context != null && AssetManagerResourcePlugin.normalizePath(context.attributePath()).equals(path)) {
                         throw new NexaScriptException("Calculation script tidak boleh menulis ke self attribute sendiri.", callLine, callColumn);
                     }
-                    return manager.writeInternal(path, arguments.get(1), "GOOD") == null;
+                    manager.writeInternal(path, arguments.get(1), "GOOD");
+                    return true;
                 };
                 default -> throw new NexaScriptException("Member assetManager tidak dikenal: " + name, line, column);
             };
