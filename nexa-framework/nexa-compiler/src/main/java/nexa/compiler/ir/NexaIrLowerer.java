@@ -80,7 +80,13 @@ public final class NexaIrLowerer {
             NexaIr.Local local = new NexaIr.Local(let.name(), type, let.constant());
             locals.put(let.name(), local);
             localList.add(local);
-            NexaIr.Value value = expression(let.init());
+
+            // Preserve the frontend's contextual type information in IR.
+            // In particular, integer literals default to INT64, but a typed
+            // declaration such as ARRAY<INT32> supplies the required element
+            // type to its literal initializer. No runtime cast is needed for
+            // a compile-time constant that is already known to fit.
+            NexaIr.Value value = expression(let.init(), type);
             emit(new NexaIr.StoreLocal(null, let.name(), value, let.constant(), let.span()));
             return;
         }
@@ -143,8 +149,14 @@ public final class NexaIrLowerer {
     }
 
     private NexaIr.Value expression(Expr expr) {
+        return expression(expr, null);
+    }
+
+    /** Lowers an expression with an optional contextual expected type. */
+    private NexaIr.Value expression(Expr expr, NexaType expectedType) {
         if (expr instanceof Literal literal) {
-            NexaType type = resolve(literal.type());
+            NexaType literalType = resolve(literal.type());
+            NexaType type = contextualLiteralType(literal, literalType, expectedType);
             NexaIr.Value result = value(type);
             emit(new NexaIr.Const(result, literal.value(), literal.span()));
             return result;
@@ -176,13 +188,26 @@ public final class NexaIrLowerer {
         }
 
         if (expr instanceof Array array) {
+            NexaType expectedElement = expectedArrayElement(expectedType);
             List<NexaIr.Value> values = new ArrayList<>();
-            NexaType elementType = NexaType.OBJECT;
+            NexaType elementType = expectedElement == null ? NexaType.OBJECT : expectedElement;
+
             for (Expr item : array.values()) {
-                NexaIr.Value itemValue = expression(item);
+                NexaIr.Value itemValue = expression(item, expectedElement);
                 values.add(itemValue);
-                if (NexaType.same(elementType, NexaType.OBJECT)) elementType = itemValue.type();
+                if (expectedElement == null) {
+                    if (NexaType.same(elementType, NexaType.OBJECT)) {
+                        elementType = itemValue.type();
+                    } else {
+                        elementType = common(elementType, itemValue.type());
+                    }
+                }
             }
+
+            if (expectedElement == null && values.isEmpty()) {
+                elementType = NexaType.OBJECT;
+            }
+
             NexaIr.Value result = value(new NexaType.Array(elementType));
             emit(new NexaIr.ArrayCreate(result, values, elementType, array.span()));
             return result;
@@ -191,8 +216,13 @@ public final class NexaIrLowerer {
         if (expr instanceof ObjectLit objectLit) {
             Map<String, NexaIr.Value> fields = new LinkedHashMap<>();
             Map<String, NexaType> fieldTypes = new LinkedHashMap<>();
+            NexaType.ObjectType expectedObject = expectedType instanceof NexaType.ObjectType o ? o : null;
+
             for (var entry : objectLit.fields().entrySet()) {
-                NexaIr.Value fieldValue = expression(entry.getValue());
+                NexaType fieldExpected = expectedObject == null
+                        ? null
+                        : expectedObject.fields().get(entry.getKey());
+                NexaIr.Value fieldValue = expression(entry.getValue(), fieldExpected);
                 fields.put(entry.getKey(), fieldValue);
                 fieldTypes.put(entry.getKey(), fieldValue.type());
             }
@@ -226,9 +256,6 @@ public final class NexaIrLowerer {
             List<NexaIr.Value> args = call.args().stream().map(this::expression).toList();
             String target = symbolicTarget(call.target());
 
-            // A dotted symbolic call is a host capability boundary. This stays
-            // dynamic until a later compilation/deployment stage resolves the
-            // capability registry and verifies its real signature.
             if (target != null && call.target() instanceof Field) {
                 int separator = target.lastIndexOf('.');
                 String namespace = target.substring(0, separator);
@@ -247,6 +274,30 @@ public final class NexaIrLowerer {
         }
 
         throw new IllegalStateException("Unsupported Nexa AST expression: " + expr.getClass().getName());
+    }
+
+    private NexaType contextualLiteralType(Literal literal, NexaType literalType, NexaType expectedType) {
+        if (expectedType == null) return literalType;
+        expectedType = resolve(expectedType);
+        literalType = resolve(literalType);
+
+        if (NexaType.same(expectedType, literalType)) return expectedType;
+
+        // Integer/float literals are represented by their default frontend
+        // type, but the semantic checker has already proved constant narrowing
+        // is safe. Carry that declared type into the IR so stores remain typed.
+        if (NexaType.numeric(expectedType) && NexaType.numeric(literalType)
+                && literal.value() instanceof Number) {
+            return expectedType;
+        }
+
+        return literalType;
+    }
+
+    private NexaType expectedArrayElement(NexaType expectedType) {
+        if (expectedType == null) return null;
+        expectedType = resolve(expectedType);
+        return expectedType instanceof NexaType.Array array ? resolve(array.element()) : null;
     }
 
     private void store(Expr target, NexaIr.Value value, SourceSpan span) {
