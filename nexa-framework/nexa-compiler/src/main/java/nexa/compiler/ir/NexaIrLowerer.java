@@ -10,8 +10,8 @@ import nexa.compiler.lang.SourceSpan;
 /**
  * Lowers the current typed AST into a backend-neutral Nexa IR.
  *
- * Important design rule: plugin/host calls are represented symbolically as
- * HostCall. The compiler never links against a plugin implementation.
+ * Plugin/host calls are represented symbolically as HostCall. The compiler
+ * never links against a plugin implementation.
  */
 public final class NexaIrLowerer {
     private static final int IR_VERSION = 1;
@@ -29,7 +29,22 @@ public final class NexaIrLowerer {
     public NexaIr.Program lower(NexaAst.Program program) {
         Objects.requireNonNull(program, "program");
         reset();
+        registerBuiltins();
 
+        switchTo(allocateBlock());
+        for (Stmt stmt : program.statements()) statement(stmt);
+
+        finishCurrentBlock(program.statements().isEmpty()
+                ? new SourceSpan(0, 0)
+                : program.statements().get(program.statements().size() - 1).span());
+
+        NexaIr.Function main = new NexaIr.Function(
+                "main", localList, blocks, NexaType.VOID, List.of());
+
+        return new NexaIr.Program("nexa.program", List.of(main), types, IR_VERSION);
+    }
+
+    private void registerBuiltins() {
         for (NexaType t : List.of(
                 NexaType.BOOLEAN, NexaType.INT8, NexaType.INT16,
                 NexaType.INT32, NexaType.INT64, NexaType.UINT8,
@@ -38,32 +53,6 @@ public final class NexaIrLowerer {
                 NexaType.OBJECT, NexaType.VOID)) {
             types.put(t.displayName(), t);
         }
-
-        types.put("self", NexaType.OBJECT);
-        types.put("input", NexaType.OBJECT);
-
-        newBlock();
-
-        for (Stmt stmt : program.statements()) {
-            statement(stmt);
-        }
-
-        finishCurrentBlock(program.statements().isEmpty()
-                ? new SourceSpan(0, 0)
-                : program.statements().get(program.statements().size() - 1).span());
-
-        NexaIr.Function main = new NexaIr.Function(
-                "main",
-                localList,
-                List.copyOf(blocks),
-                NexaType.VOID,
-                List.of());
-
-        return new NexaIr.Program(
-                "nexa.program",
-                List.of(main),
-                types,
-                IR_VERSION);
     }
 
     private void reset() {
@@ -91,7 +80,6 @@ public final class NexaIrLowerer {
             NexaIr.Local local = new NexaIr.Local(let.name(), type, let.constant());
             locals.put(let.name(), local);
             localList.add(local);
-
             NexaIr.Value value = expression(let.init());
             emit(new NexaIr.StoreLocal(null, let.name(), value, let.constant(), let.span()));
             return;
@@ -115,9 +103,7 @@ public final class NexaIrLowerer {
             return;
         }
 
-        if (stmt instanceof For loop) {
-            lowerFor(loop);
-        }
+        if (stmt instanceof For loop) lowerFor(loop);
     }
 
     private void lowerFor(For loop) {
@@ -125,9 +111,9 @@ public final class NexaIrLowerer {
         NexaIr.Value iterator = value(NexaType.OBJECT);
         emit(new NexaIr.Iterate(iterator, iterable, loop.iterable().span()));
 
-        int header = newBlock();
-        int body = newBlock();
-        int exit = newBlock();
+        int header = allocateBlock();
+        int body = allocateBlock();
+        int exit = allocateBlock();
 
         terminate(new NexaIr.Jump(header, loop.span()));
         switchTo(header);
@@ -147,7 +133,6 @@ public final class NexaIrLowerer {
         if (previous == null) localList.add(loopLocal);
         emit(new NexaIr.StoreLocal(null, loop.name(), element, false, loop.span()));
 
-        terminated = false;
         for (Stmt stmt : loop.body()) statement(stmt);
         if (!terminated) terminate(new NexaIr.Jump(header, loop.span()));
 
@@ -155,7 +140,6 @@ public final class NexaIrLowerer {
         else locals.put(loop.name(), previous);
 
         switchTo(exit);
-        terminated = false;
     }
 
     private NexaIr.Value expression(Expr expr) {
@@ -195,11 +179,10 @@ public final class NexaIrLowerer {
             List<NexaIr.Value> values = new ArrayList<>();
             NexaType elementType = NexaType.OBJECT;
             for (Expr item : array.values()) {
-                NexaIr.Value value = expression(item);
-                values.add(value);
-                if (elementType == NexaType.OBJECT) elementType = value.type();
+                NexaIr.Value itemValue = expression(item);
+                values.add(itemValue);
+                if (NexaType.same(elementType, NexaType.OBJECT)) elementType = itemValue.type();
             }
-            if (array.values().isEmpty()) elementType = NexaType.OBJECT;
             NexaIr.Value result = value(new NexaType.Array(elementType));
             emit(new NexaIr.ArrayCreate(result, values, elementType, array.span()));
             return result;
@@ -209,9 +192,9 @@ public final class NexaIrLowerer {
             Map<String, NexaIr.Value> fields = new LinkedHashMap<>();
             Map<String, NexaType> fieldTypes = new LinkedHashMap<>();
             for (var entry : objectLit.fields().entrySet()) {
-                NexaIr.Value value = expression(entry.getValue());
-                fields.put(entry.getKey(), value);
-                fieldTypes.put(entry.getKey(), value.type());
+                NexaIr.Value fieldValue = expression(entry.getValue());
+                fields.put(entry.getKey(), fieldValue);
+                fieldTypes.put(entry.getKey(), fieldValue.type());
             }
             NexaType.ObjectType objectType = new NexaType.ObjectType(fieldTypes);
             NexaIr.Value result = value(objectType);
@@ -221,7 +204,8 @@ public final class NexaIrLowerer {
 
         if (expr instanceof Unary unary) {
             NexaIr.Value operand = expression(unary.expr());
-            NexaIr.Value result = value(operand.type());
+            NexaType resultType = unary.op().equals("!") ? NexaType.BOOLEAN : operand.type();
+            NexaIr.Value result = value(resultType);
             emit(new NexaIr.Unary(result, unary.op(), operand, unary.span()));
             return result;
         }
@@ -242,20 +226,23 @@ public final class NexaIrLowerer {
             List<NexaIr.Value> args = call.args().stream().map(this::expression).toList();
             String target = symbolicTarget(call.target());
 
+            // A dotted symbolic call is a host capability boundary. This stays
+            // dynamic until a later compilation/deployment stage resolves the
+            // capability registry and verifies its real signature.
             if (target != null && call.target() instanceof Field) {
-                String namespace = target.substring(0, target.lastIndexOf('.'));
-                String name = target.substring(target.lastIndexOf('.') + 1);
-                List<NexaType> parameterTypes = args.stream().map(NexaIr.Value::type).toList();
+                int separator = target.lastIndexOf('.');
+                String namespace = target.substring(0, separator);
+                String name = target.substring(separator + 1);
                 NexaIr.HostCapability capability = new NexaIr.HostCapability(namespace, name, "1");
-                NexaIr.HostSignature signature = new NexaIr.HostSignature(parameterTypes, NexaType.OBJECT);
+                NexaIr.HostSignature signature = new NexaIr.HostSignature(
+                        args.stream().map(NexaIr.Value::type).toList(), NexaType.OBJECT);
                 NexaIr.Value result = value(NexaType.OBJECT);
                 emit(new NexaIr.HostCall(result, capability, signature, args, call.span()));
                 return result;
             }
 
-            if (target == null) target = "<dynamic>";
             NexaIr.Value result = value(NexaType.OBJECT);
-            emit(new NexaIr.Call(result, target, args, call.span()));
+            emit(new NexaIr.Call(result, target == null ? "<dynamic>" : target, args, call.span()));
             return result;
         }
 
@@ -309,8 +296,7 @@ public final class NexaIrLowerer {
     private NexaType common(NexaType a, NexaType b) {
         if (NexaType.same(a, b)) return a;
         if (!NexaType.numeric(a) || !NexaType.numeric(b)) return NexaType.OBJECT;
-        int ar = rank(a), br = rank(b);
-        return ar >= br ? a : b;
+        return rank(a) >= rank(b) ? a : b;
     }
 
     private int rank(NexaType type) {
@@ -328,8 +314,7 @@ public final class NexaIrLowerer {
     private NexaType resolve(NexaType type) {
         if (type == null) return NexaType.OBJECT;
         if (type instanceof NexaType.Named named) {
-            NexaType resolved = named.resolved();
-            if (resolved != null) return resolve(resolved);
+            if (named.resolved() != null) return resolve(named.resolved());
             return types.getOrDefault(named.name(), NexaType.OBJECT);
         }
         if (type instanceof NexaType.Array array) return new NexaType.Array(resolve(array.element()));
@@ -349,13 +334,8 @@ public final class NexaIrLowerer {
         instructions.add(instruction);
     }
 
-    private int newBlock() {
-        int id = nextBlock++;
-        if (currentBlock >= 0) flushCurrentBlock(new NexaIr.Stop(new SourceSpan(0, 0)));
-        currentBlock = id;
-        instructions.clear();
-        terminated = false;
-        return id;
+    private int allocateBlock() {
+        return nextBlock++;
     }
 
     private void switchTo(int block) {
@@ -373,8 +353,10 @@ public final class NexaIrLowerer {
     }
 
     private void finishCurrentBlock(SourceSpan span) {
-        if (currentBlock < 0) return;
-        if (!terminated) flushCurrentBlock(new NexaIr.Stop(span));
+        if (currentBlock >= 0 && !terminated) {
+            flushCurrentBlock(new NexaIr.Stop(span));
+            terminated = true;
+        }
     }
 
     private void flushCurrentBlock(NexaIr.Terminator terminator) {
