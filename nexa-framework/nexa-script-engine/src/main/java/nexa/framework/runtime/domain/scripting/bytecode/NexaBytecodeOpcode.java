@@ -1,0 +1,35 @@
+package nexa.framework.runtime.domain.scripting.bytecode;
+
+/** Stable instruction set for the Nexa bytecode VM. */
+public enum NexaBytecodeOpcode {
+    CONST,
+    LOAD_LOCAL,
+    STORE_LOCAL,
+    LOAD_GLOBAL,
+    LOAD_PROPERTY,
+    STORE_PROPERTY,
+    LOAD_INDEX,
+    STORE_INDEX,
+    MAKE_ARRAY,
+    MAKE_OBJECT,
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    MOD,
+    NEGATE,
+    NOT,
+    EQUAL,
+    NOT_EQUAL,
+    LESS,
+    LESS_EQUAL,
+    GREATER,
+    GREATER_EQUAL,
+    AND,
+    OR,
+    JUMP,
+    JUMP_IF_FALSE,
+    CALL_HOST,
+    POP,
+    RETURN
+}
