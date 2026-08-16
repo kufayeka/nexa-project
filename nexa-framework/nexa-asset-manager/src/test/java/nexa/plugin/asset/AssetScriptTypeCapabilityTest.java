@@ -114,6 +114,23 @@ final class AssetScriptTypeCapabilityTest {
     }
 
     @Test
+    void calculationScriptUpdatesItsOwnValueByReturningTheNewValue() {
+        Attribute attr = new Attribute("temperature", "/temperature", "FLOAT64", 20.0d, null);
+        plugin.getFlatAttributes().put("/temperature", attr);
+
+        String script = "return self.value * 1.8 + 32;";
+        Object result = plugin.getScriptingEngine().executeCalculation(
+                script, "/temperature", attr.getValue(), attr.getOldValue(), 25.0d);
+
+        assertEquals(68.0d, result);
+
+        // This is the normal Asset Manager calculation contract: the engine returns
+        // the calculated value, and AssetManagerResourcePlugin commits it to self.
+        attr.updateValue(result, "GOOD");
+        assertEquals(68.0d, attr.getValue());
+    }
+
+    @Test
     void selfExposesCurrentOldNewTimestampAndQuality() {
         Attribute attr = new Attribute("value", "/value", "INT32", 10, null);
         plugin.getFlatAttributes().put("/value", attr);
