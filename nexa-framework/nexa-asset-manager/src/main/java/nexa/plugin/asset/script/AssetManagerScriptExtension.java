@@ -58,6 +58,9 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                         throw new NexaScriptException("Method write() memerlukan 2 argumen: path dan value.", callLine, callColumn);
                     }
                     String path = resolvePath(engine, String.valueOf(arguments.getFirst()));
+                    if (!manager.getFlatAttributes().containsKey(path)) {
+                        throw new NexaScriptException("Attribute tidak ditemukan: " + path, callLine, callColumn);
+                    }
                     AssetScriptContext context = engine.currentContext();
                     if (context != null && AssetManagerResourcePlugin.normalizePath(context.attributePath()).equals(path)) {
                         throw new NexaScriptException("Calculation script tidak boleh menulis ke self attribute sendiri.", callLine, callColumn);
