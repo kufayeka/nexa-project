@@ -1,7 +1,6 @@
 package nexa.framework.runtime.domain.scripting.bytecode;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiFunction;
 
 /** Runtime bindings used by bytecode. Host integrations stay outside the VM. */
@@ -25,7 +24,6 @@ public final class NexaBytecodeExecutionContext {
     }
 
     public Object callHost(String name, Object[] args) {
-        return Objects.requireNonNull(hostCall.apply(name, args), "host function returned null") == null
-                ? null : hostCall.apply(name, args);
+        return hostCall.apply(name, args);
     }
 }
