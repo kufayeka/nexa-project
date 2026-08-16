@@ -1,17 +1,17 @@
 package nexa.framework.runtime.domain.scripting.bytecode;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
 /** Small stack VM. It intentionally knows nothing about Asset Manager, MQTT, Control, etc. */
 public final class NexaBytecodeVm {
     public Object execute(NexaBytecodeProgram program, NexaBytecodeExecutionContext context) {
         Object[] locals = new Object[program.localCount()];
-        Deque<Object> stack = new ArrayDeque<>();
+        Stack<Object> stack = new Stack<>();
         List<NexaBytecodeInstruction> code = program.instructions();
         int pc = 0;
 
@@ -146,7 +146,6 @@ public final class NexaBytecodeVm {
         return true;
     }
 
-    @SuppressWarnings("unchecked")
     private static Object readProperty(Object target, String property) {
         if (target instanceof Map<?, ?> map) return map.get(property);
         throw new IllegalArgumentException("Cannot read property '" + property + "' from " + target);
