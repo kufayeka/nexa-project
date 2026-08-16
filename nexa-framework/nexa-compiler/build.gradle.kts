@@ -6,6 +6,11 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
@@ -14,4 +19,6 @@ java {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    minHeapSize = "8m"
+    maxHeapSize = "512m"
 }
