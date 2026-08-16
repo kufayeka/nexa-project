@@ -1,123 +1,114 @@
 {
-    "id": "workspace-mqtt-demo",
+    "id": "workspace-mqtt-loopback-stress",
     "enabled": true,
     "resources": [
         {
-            "id": "mqtt-pool-pabrik",
+            "id": "mqtt-pool-loopback",
             "type": "mqtt-client-pool",
             "enabled": true,
             "config": {
-                "name": "koneksi mqtt 1",
+                "name": "mqtt loopback stress",
                 "brokerUrl": "tcp://broker.hivemq.com:1883",
-                "keepAlive": 60
-            }
-        },
-        {
-            "id": "mqtt-pool-pabrik-2",
-            "type": "mqtt-client-pool",
-            "enabled": true,
-            "config": {
-                "name": "koneksi mqtt 2",
-                "brokerUrl": "tcp://broker.hivemq.com:1883",
-                "keepAlive": 60
+                "keepAlive": 60,
+                "clientId": "nexa-stress-test-loopback",
+                "username": "",
+                "password": "",
+                "cleanSession": true,
+                "connectionTimeout": 30,
+                "automaticReconnect": true,
+                "publish": {
+                    "queue": {
+                        "enabled": true,
+                        "capacity": 10000,
+                        "overflowStrategy": "BLOCK"
+                    },
+                    "worker": {
+                        "threads": 5
+                    }
+                }
             }
         }
     ],
     "flows": [
         {
-            "id": "mqtt-flow",
-            "name": "MQTT Production Pipeline",
+            "id": "mqtt-loopback-flow",
+            "name": "MQTT Loopback Stress Test",
             "enabled": true,
             "nodes": [
                 {
-                    "id": "mqtt-in-1",
+                    "id": "trigger-1",
+                    "category": "INPUT",
+                    "type": "timed-trigger",
+                    "enabled": true,
+                    "config": {
+                        "interval": "5ms",
+                        "payload": {
+                            "source": "nexa-stress-test"
+                        }
+                    }
+                },
+                {
+                    "id": "mqtt-out-generator",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "mqtt loopback stress",
+                        "topic": "nexa/stress/loopback/input"
+                    }
+                },
+                {
+                    "id": "mqtt-in-loopback",
                     "category": "INPUT",
                     "type": "mqtt-shared-input",
                     "enabled": true,
                     "config": {
-                        "mqttClientPool": "koneksi mqtt 1",
-                        "topic": "nexa/mes/sensor/data"
+                        "mqttClientPool": "mqtt loopback stress",
+                        "topic": "nexa/stress/loopback/input"
                     }
                 },
                 {
-                    "id": "executor-1",
+                    "id": "executor-process",
                     "category": "EXECUTOR",
                     "type": "script",
                     "language": "nexa",
                     "enabled": true,
                     "config": {
-                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 1; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                        "script": "msg.payload.processed = true; send(msg);"
                     }
                 },
                 {
-                    "id": "mqtt-out-1",
+                    "id": "mqtt-out-result",
                     "category": "OUTPUT",
                     "type": "mqtt-shared-sink",
                     "enabled": true,
                     "config": {
-                        "mqttClientPool": "koneksi mqtt 2",
-                        "topic": "nexa/mes/sensor/processed/1"
-                    }
-                },
-                {
-                    "id": "mqtt-in-2",
-                    "category": "INPUT",
-                    "type": "mqtt-shared-input",
-                    "enabled": true,
-                    "config": {
-                        "mqttClientPool": "koneksi mqtt 1",
-                        "topic": "nexa/mes/sensor/data"
-                    }
-                },
-                {
-                    "id": "executor-2",
-                    "category": "EXECUTOR",
-                    "type": "script",
-                    "language": "nexa",
-                    "enabled": true,
-                    "config": {
-                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 2; msg.payload.processedData = raw.toUpperCase(); send(msg);"
-                    }
-                },
-                {
-                    "id": "mqtt-out-2",
-                    "category": "OUTPUT",
-                    "type": "mqtt-shared-sink",
-                    "enabled": true,
-                    "config": {
-                        "mqttClientPool": "koneksi mqtt 2",
-                        "topic": "nexa/mes/sensor/processed/2"
+                        "mqttClientPool": "mqtt loopback stress",
+                        "topic": "nexa/stress/loopback/result"
                     }
                 }
             ],
             "connections": [
                 {
-                    "id": "7f4a2c91-8d63-4e17-b5a9-2c8f1d6e7034",
+                    "id": "trigger-to-mqtt",
                     "enabled": true,
-                    "sourceNodeId": "mqtt-in-1",
+                    "sourceNodeId": "trigger-1",
                     "sourcePort": "default",
-                    "targetNodeId": "executor-1"
+                    "targetNodeId": "mqtt-out-generator"
                 },
                 {
-                    "id": "c3e81954-6a27-4b90-9d15-f72c4a8e6310",
+                    "id": "mqtt-to-input",
                     "enabled": true,
-                    "sourceNodeId": "executor-1",
+                    "sourceNodeId": "mqtt-in-loopback",
                     "sourcePort": "default",
-                    "targetNodeId": "mqtt-out-1"
+                    "targetNodeId": "executor-process"
                 },
                 {
-                    "id": "a61d3f82-9c54-47e0-b128-5d7a9f36c204",
+                    "id": "executor-to-result",
                     "enabled": true,
-                    "sourceNodeId": "mqtt-in-2",
+                    "sourceNodeId": "executor-process",
                     "sourcePort": "default",
-                    "targetNodeId": "executor-2"
-                },
-                {
-                    "id": "e9257b40-3d18-4ac6-86f2-b91e5c7a2036",
-                    "enabled": true,
-                    "sourceNodeId": "executor-2",
-                    "sourcePort": "default",
-                    "targetNodeId": "mqtt-out-2"
+                    "targetNodeId": "mqtt-out-result"
                 }
             ]
         }
