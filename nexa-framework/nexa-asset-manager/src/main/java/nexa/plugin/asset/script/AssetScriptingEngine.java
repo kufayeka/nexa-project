@@ -15,9 +15,8 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Scripting engine owned by one Asset Manager instance.
  *
- * Scripts are compiled once and their immutable programs are reused for every
- * execution. Execution state is local to this engine instance and to the
- * executing thread; no global Asset Manager scripting registry is required.
+ * Source is compiled during workspace load and the immutable program is reused
+ * for every execution. The hot path never tokenizes or parses a script.
  */
 public final class AssetScriptingEngine {
     private final AssetManagerResourcePlugin assetManager;
@@ -33,6 +32,18 @@ public final class AssetScriptingEngine {
             throw new IllegalArgumentException("Asset calculation script cannot be empty.");
         }
         return compiledScripts.computeIfAbsent(source, this::compileUncached);
+    }
+
+    /** Compile a script eagerly and associate compilation failures with its asset path. */
+    public CompiledAssetScript precompile(String attributePath, String source) {
+        try {
+            return compile(source);
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException(
+                "Invalid Nexa calculation script for asset " + attributePath + ": " + exception.getMessage(),
+                exception
+            );
+        }
     }
 
     private CompiledAssetScript compileUncached(String source) {
