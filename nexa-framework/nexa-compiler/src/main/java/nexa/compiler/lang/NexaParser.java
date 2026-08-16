@@ -48,11 +48,29 @@ public final class NexaParser {
     }
 
     private Stmt forStmt() {
-        int st = prev().span().start(); expect(NexaToken.Kind.LPAREN); expect(NexaToken.Kind.LET);
-        String n = expect(NexaToken.Kind.IDENT).text(); expect(NexaToken.Kind.COLON); NexaType t = type();
-        expect(NexaToken.Kind.IN); Expr it = expr(); expect(NexaToken.Kind.RPAREN); expect(NexaToken.Kind.LBRACE);
-        List<Stmt> b = new ArrayList<>(); while (!at(NexaToken.Kind.RBRACE)) b.add(stmt());
-        NexaToken r = expect(NexaToken.Kind.RBRACE); return new For(n, t, it, b, span(st, r.span().end()));
+        int st = prev().span().start();
+        expect(NexaToken.Kind.LPAREN);
+
+        // Nexa accepts both forms:
+        //   for (item: INT32 in xs) { ... }
+        //   for (let item: INT32 in xs) { ... }
+        // The former is the canonical compact loop syntax; the latter is
+        // accepted for symmetry with normal variable declarations.
+        match(NexaToken.Kind.LET);
+
+        String n = expect(NexaToken.Kind.IDENT).text();
+        expect(NexaToken.Kind.COLON);
+        NexaType t = type();
+        expect(NexaToken.Kind.IN);
+        Expr it = expr();
+        expect(NexaToken.Kind.RPAREN);
+        expect(NexaToken.Kind.LBRACE);
+
+        List<Stmt> b = new ArrayList<>();
+        while (!at(NexaToken.Kind.RBRACE)) b.add(stmt());
+
+        NexaToken r = expect(NexaToken.Kind.RBRACE);
+        return new For(n, t, it, b, span(st, r.span().end()));
     }
 
     private NexaType type() {
