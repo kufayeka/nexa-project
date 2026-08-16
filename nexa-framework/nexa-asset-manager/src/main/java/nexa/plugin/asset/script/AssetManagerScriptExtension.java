@@ -28,7 +28,7 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                 throw new NexaScriptException("Asset Manager plugin belum aktif atau tidak dapat ditemukan.", line, column);
             }
 
-            AssetScriptingEngine engine = AssetScriptingEngine.forManager(manager);
+            AssetScriptingEngine engine = manager.getScriptingEngine();
 
             return switch (name) {
                 case "read" -> (NexaCallable) (runtime, arguments, callLine, callColumn) -> {
