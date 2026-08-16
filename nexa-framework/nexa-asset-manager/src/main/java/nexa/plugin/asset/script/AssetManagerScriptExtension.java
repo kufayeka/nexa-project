@@ -6,16 +6,20 @@ import nexa.framework.runtime.domain.scripting.internal.nexa.NexaRuntime.NexaCal
 import nexa.framework.runtime.domain.scripting.internal.nexa.NexaRuntimeExtension;
 import nexa.plugin.asset.resource.AssetManagerResourcePlugin;
 
+import java.math.BigInteger;
 import java.util.Map;
 
 /** Host bridge exposed only to the Asset Manager scripting environment. */
 public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
 
+    private static final BigInteger UINT64_MAX = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+
     @Override
     public Map<String, Object> globals() {
         return Map.of(
             "assetManager", new AssetManagerHostObject(),
-            "self", new SelfHostObject()
+            "self", new SelfHostObject(),
+            "UInt64", new UInt64HostObject()
         );
     }
 
@@ -78,6 +82,59 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                 return AssetManagerResourcePlugin.resolvePath(context.attributePath(), path);
             }
             return AssetManagerResourcePlugin.normalizePath(path);
+        }
+    }
+
+    /** Exact UInt64 arithmetic for values above signed long range. */
+    private static final class UInt64HostObject implements NexaHostObject {
+        @Override
+        public Object member(String name, int line, int column) {
+            return switch (name) {
+                case "add" -> (NexaCallable) (runtime, arguments, callLine, callColumn) ->
+                        checked(toBigInteger(arguments, 0, callLine, callColumn)
+                                .add(toBigInteger(arguments, 1, callLine, callColumn)), callLine, callColumn);
+                case "subtract" -> (NexaCallable) (runtime, arguments, callLine, callColumn) ->
+                        checked(toBigInteger(arguments, 0, callLine, callColumn)
+                                .subtract(toBigInteger(arguments, 1, callLine, callColumn)), callLine, callColumn);
+                case "compare" -> (NexaCallable) (runtime, arguments, callLine, callColumn) ->
+                        toBigInteger(arguments, 0, callLine, callColumn)
+                                .compareTo(toBigInteger(arguments, 1, callLine, callColumn));
+                case "parse" -> (NexaCallable) (runtime, arguments, callLine, callColumn) ->
+                        checked(new BigInteger(String.valueOf(requireArg(arguments, 0, callLine, callColumn))), callLine, callColumn);
+                case "toString" -> (NexaCallable) (runtime, arguments, callLine, callColumn) ->
+                        toBigInteger(arguments, 0, callLine, callColumn).toString();
+                default -> throw new NexaScriptException("Member UInt64 tidak dikenal: " + name, line, column);
+            };
+        }
+
+        private static Object requireArg(java.util.List<Object> arguments, int index, int line, int column) {
+            if (index >= arguments.size()) {
+                throw new NexaScriptException("Argumen UInt64 kurang.", line, column);
+            }
+            return arguments.get(index);
+        }
+
+        private static BigInteger toBigInteger(java.util.List<Object> arguments, int index, int line, int column) {
+            Object value = requireArg(arguments, index, line, column);
+            if (value instanceof BigInteger b) return b;
+            if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) {
+                return BigInteger.valueOf(((Number) value).longValue());
+            }
+            if (value instanceof String s) {
+                try {
+                    return new BigInteger(s);
+                } catch (NumberFormatException e) {
+                    throw new NexaScriptException("Invalid UInt64 value: " + s, line, column);
+                }
+            }
+            throw new NexaScriptException("UInt64 membutuhkan integer/string integer.", line, column);
+        }
+
+        private static BigInteger checked(BigInteger value, int line, int column) {
+            if (value.signum() < 0 || value.compareTo(UINT64_MAX) > 0) {
+                throw new NexaScriptException("UInt64 overflow: " + value, line, column);
+            }
+            return value;
         }
     }
 }
