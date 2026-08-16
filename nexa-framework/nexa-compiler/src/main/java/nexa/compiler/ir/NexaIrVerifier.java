@@ -4,15 +4,7 @@ import java.util.*;
 
 import nexa.compiler.lang.NexaType;
 
-/**
- * Backend-independent verifier for Nexa IR.
- *
- * The verifier checks structural integrity, SSA values, locals, primitive
- * operations, control flow, iterator contracts, object/array shapes and the
- * dynamic host boundary. Host signatures are intentionally checked strictly:
- * the runtime may dispatch dynamically, but the compiled IR must still carry
- * a self-consistent contract.
- */
+/** Backend-independent verifier for Nexa IR. */
 public final class NexaIrVerifier {
     public record Diagnostic(String message) {}
 
@@ -91,7 +83,7 @@ public final class NexaIrVerifier {
         if (instruction instanceof NexaIr.LoadLocal load) {
             NexaIr.Local local = locals.get(load.name());
             if (local == null) errors.add(new Diagnostic("Load of unknown local: " + load.name()));
-            else if (!sameOrNumeric(load.result().type(), local.type())) errors.add(new Diagnostic("Local load type mismatch for " + load.name()));
+            else if (!assignable(local.type(), load.result().type())) errors.add(new Diagnostic("Local load type mismatch for " + load.name()));
             return;
         }
 
@@ -102,7 +94,7 @@ public final class NexaIrVerifier {
             } else {
                 stores.merge(store.name(), 1, Integer::sum);
                 if (local.constant() && !store.constant()) errors.add(new Diagnostic("Cannot assign const local: " + store.name()));
-                if (!sameOrNumeric(local.type(), store.value().type())) {
+                if (!assignable(local.type(), store.value().type())) {
                     errors.add(new Diagnostic("Local store type mismatch for " + store.name()
                             + ": expected " + local.type().displayName()
                             + ", got " + store.value().type().displayName()));
@@ -118,7 +110,7 @@ public final class NexaIrVerifier {
 
         if (instruction instanceof NexaIr.StoreField store) {
             NexaType fieldType = fieldType(store.target().type(), store.field());
-            if (!sameOrNumeric(fieldType, store.value().type())) errors.add(new Diagnostic("Field store type mismatch for " + store.field()));
+            if (!assignable(fieldType, store.value().type())) errors.add(new Diagnostic("Field store type mismatch for " + store.field()));
             return;
         }
 
@@ -129,9 +121,7 @@ public final class NexaIrVerifier {
 
         if (instruction instanceof NexaIr.StoreIndex store) {
             NexaType elementType = indexType(store.target().type());
-            if (!sameOrNumeric(elementType, store.value().type()) && !NexaType.same(elementType, NexaType.OBJECT)) {
-                errors.add(new Diagnostic("Indexed store type mismatch"));
-            }
+            if (!assignable(elementType, store.value().type())) errors.add(new Diagnostic("Indexed store type mismatch"));
             return;
         }
 
@@ -140,7 +130,7 @@ public final class NexaIrVerifier {
                 errors.add(new Diagnostic("ArrayCreate result type does not match element type"));
             }
             for (NexaIr.Value value : array.values()) {
-                if (!sameOrNumeric(array.elementType(), value.type())) {
+                if (!assignable(array.elementType(), value.type())) {
                     errors.add(new Diagnostic("Array element type mismatch: expected "
                             + array.elementType().displayName() + ", got " + value.type().displayName()));
                 }
@@ -154,7 +144,7 @@ public final class NexaIrVerifier {
             }
             for (Map.Entry<String, NexaIr.Value> entry : object.fields().entrySet()) {
                 NexaType expected = object.type().fields().get(entry.getKey());
-                if (expected == null || !sameOrNumeric(expected, entry.getValue().type())) {
+                if (expected == null || !assignable(expected, entry.getValue().type())) {
                     errors.add(new Diagnostic("Object field type mismatch: " + entry.getKey()));
                 }
             }
@@ -196,7 +186,6 @@ public final class NexaIrVerifier {
         if (instruction instanceof NexaIr.IterNext next) {
             if (!NexaType.same(next.iterator().type(), NexaType.OBJECT)) errors.add(new Diagnostic("Iterator handle must be OBJECT"));
             if (!NexaType.same(next.result().type(), next.elementType())) errors.add(new Diagnostic("IterNext result type mismatch"));
-            return;
         }
     }
 
@@ -223,7 +212,7 @@ public final class NexaIrVerifier {
         }
 
         NexaType expected = commonNumeric(left, right);
-        if (!sameOrNumeric(expected, binary.result().type())) errors.add(new Diagnostic("Arithmetic result type mismatch"));
+        if (!assignable(expected, binary.result().type())) errors.add(new Diagnostic("Arithmetic result type mismatch"));
     }
 
     private void verifyHostCall(NexaIr.HostCall host, List<Diagnostic> errors) {
@@ -242,9 +231,6 @@ public final class NexaIrVerifier {
             }
         }
 
-        // HostCall.result is the value the runtime promises to return. The
-        // signature must describe exactly that type (numeric widening is not
-        // a valid substitute at an ABI boundary).
         if (!NexaType.same(host.result().type(), host.signature().result())) {
             errors.add(new Diagnostic("Host result type does not match signature for "
                     + host.capability().qualifiedName()));
@@ -252,19 +238,12 @@ public final class NexaIrVerifier {
     }
 
     private boolean hostCompatible(NexaType expected, NexaType actual) {
-        if (NexaType.same(expected, actual)) return true;
-        return NexaType.numeric(expected) && NexaType.numeric(actual) && rank(actual) <= rank(expected);
+        return NexaType.same(expected, actual)
+                || (NexaType.numeric(expected) && NexaType.numeric(actual) && rank(actual) <= rank(expected));
     }
 
-    private void verifyTerminator(
-            NexaIr.Terminator terminator,
-            Map<Integer, NexaIr.Value> values,
-            Set<Integer> blocks,
-            List<Diagnostic> errors) {
-        if (terminator == null) {
-            errors.add(new Diagnostic("Block has no terminator"));
-            return;
-        }
+    private void verifyTerminator(NexaIr.Terminator terminator, Map<Integer, NexaIr.Value> values, Set<Integer> blocks, List<Diagnostic> errors) {
+        if (terminator == null) { errors.add(new Diagnostic("Block has no terminator")); return; }
         if (terminator instanceof NexaIr.Jump jump) {
             if (!blocks.contains(jump.targetBlock())) errors.add(new Diagnostic("Unknown control-flow target block: " + jump.targetBlock()));
         } else if (terminator instanceof NexaIr.Branch branch) {
@@ -275,13 +254,11 @@ public final class NexaIrVerifier {
         }
     }
 
-    private boolean isIterable(NexaType type) {
-        return type instanceof NexaType.Array || NexaType.same(type, NexaType.OBJECT);
-    }
+    private boolean isIterable(NexaType type) { return type instanceof NexaType.Array || NexaType.same(type, NexaType.OBJECT); }
 
     private void verifyFieldType(NexaType target, String field, NexaType result, List<Diagnostic> errors) {
         NexaType expected = fieldType(target, field);
-        if (!sameOrNumeric(expected, result) && !NexaType.same(expected, NexaType.OBJECT)) errors.add(new Diagnostic("Field load type mismatch for " + field));
+        if (!assignable(expected, result)) errors.add(new Diagnostic("Field load type mismatch for " + field));
     }
 
     private NexaType fieldType(NexaType target, String field) {
@@ -293,29 +270,39 @@ public final class NexaIrVerifier {
         if (target instanceof NexaType.Array) {
             if (!NexaType.numeric(index)) errors.add(new Diagnostic("Array index must be numeric"));
             NexaType expected = indexType(target);
-            if (!sameOrNumeric(expected, result)) errors.add(new Diagnostic("Array load result type mismatch"));
+            if (!assignable(expected, result)) errors.add(new Diagnostic("Array load result type mismatch"));
         } else if (!NexaType.same(target, NexaType.OBJECT)) {
             errors.add(new Diagnostic("Indexing requires ARRAY or OBJECT"));
         }
     }
 
-    private NexaType indexType(NexaType target) {
-        if (target instanceof NexaType.Array array) return array.element();
-        return NexaType.OBJECT;
-    }
+    private NexaType indexType(NexaType target) { return target instanceof NexaType.Array array ? array.element() : NexaType.OBJECT; }
 
     private boolean compatible(NexaType a, NexaType b) {
-        return NexaType.same(a, b)
-                || (NexaType.numeric(a) && NexaType.numeric(b))
-                || NexaType.same(a, NexaType.OBJECT)
-                || NexaType.same(b, NexaType.OBJECT);
+        return NexaType.same(a, b) || (NexaType.numeric(a) && NexaType.numeric(b)) || NexaType.same(a, NexaType.OBJECT) || NexaType.same(b, NexaType.OBJECT);
     }
 
-    private boolean sameOrNumeric(NexaType expected, NexaType actual) {
-        return NexaType.same(expected, actual)
-                || (NexaType.numeric(expected) && NexaType.numeric(actual))
-                || NexaType.same(expected, NexaType.OBJECT)
-                || NexaType.same(actual, NexaType.OBJECT);
+    /** Recursive IR assignability. Arrays/objects are structural; OBJECT is dynamic. */
+    private boolean assignable(NexaType expected, NexaType actual) {
+        if (expected == null || actual == null) return false;
+        if (NexaType.same(expected, actual)) return true;
+        if (NexaType.same(expected, NexaType.OBJECT)) return true;
+        if (NexaType.same(actual, NexaType.OBJECT)) return true;
+        if (NexaType.numeric(expected) && NexaType.numeric(actual)) return rank(actual) <= rank(expected);
+
+        if (expected instanceof NexaType.Array ea && actual instanceof NexaType.Array aa) {
+            return assignable(ea.element(), aa.element());
+        }
+
+        if (expected instanceof NexaType.ObjectType eo && actual instanceof NexaType.ObjectType ao) {
+            if (!eo.fields().keySet().equals(ao.fields().keySet())) return false;
+            for (String name : eo.fields().keySet()) {
+                if (!assignable(eo.fields().get(name), ao.fields().get(name))) return false;
+            }
+            return true;
+        }
+
+        return false;
     }
 
     private NexaType commonNumeric(NexaType a, NexaType b) {
