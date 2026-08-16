@@ -200,6 +200,8 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         Object oldVal = attr.getValue();
         attr.updateValue(finalVal, "GOOD");
 
+        notifyListeners(attr.getPath(), finalVal, oldVal, attr.getTimestamp(), attr.getQuality());
+
         if (!java.util.Objects.equals(oldVal, finalVal)) {
             triggerDependents(attr.getPath());
         }
@@ -212,8 +214,40 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         if (attr != null) {
             Object oldVal = attr.getValue();
             attr.updateValue(value, quality);
+            notifyListeners(attr.getPath(), value, oldVal, attr.getTimestamp(), attr.getQuality());
             if (!java.util.Objects.equals(oldVal, value)) {
                 triggerDependents(attr.getPath());
+            }
+        }
+    }
+
+    // Listener Registry
+    public interface AttributeListener {
+        void onUpdate(String path, Object value, Object oldValue, long timestamp, String quality);
+    }
+
+    private final ConcurrentHashMap<String, List<AttributeListener>> listeners = new ConcurrentHashMap<>();
+
+    public void registerListener(String path, AttributeListener listener) {
+        listeners.computeIfAbsent(normalizePath(path), k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(listener);
+    }
+
+    public void unregisterListener(String path, AttributeListener listener) {
+        List<AttributeListener> list = listeners.get(normalizePath(path));
+        if (list != null) {
+            list.remove(listener);
+        }
+    }
+
+    private void notifyListeners(String path, Object value, Object oldValue, long timestamp, String quality) {
+        List<AttributeListener> list = listeners.get(normalizePath(path));
+        if (list != null) {
+            for (AttributeListener l : list) {
+                try {
+                    l.onUpdate(path, value, oldValue, timestamp, quality);
+                } catch (Exception e) {
+                    System.err.println("Error notifying listener for " + path + ": " + e.getMessage());
+                }
             }
         }
     }
@@ -262,6 +296,7 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         );
 
         attr.updateValue(calculated, "GOOD");
+        notifyListeners(attr.getPath(), calculated, oldVal, attr.getTimestamp(), attr.getQuality());
 
         if (!java.util.Objects.equals(oldVal, calculated)) {
             triggerDependents(attributePath);

@@ -43,6 +43,14 @@
                     }
                 }
             }
+        },
+        {
+            "id": "asset-manager-resource",
+            "type": "asset-manager",
+            "enabled": true,
+            "config": {
+                "configFile": "workspaces/workspace-assets-2.json"
+            }
         }
     ],
     "flows": [
@@ -51,6 +59,27 @@
             "name": "Modbus to MQTT Bridge",
             "enabled": true,
             "nodes": [
+                {
+                    "id": "asset-write-flowRate",
+                    "category": "OUTPUT",
+                    "type": "asset-write",
+                    "enabled": true,
+                    "config": {
+                        "attributePath": "/SiteB/LineA/Pump1/flowRate",
+                        "valueSource": "payload.value"
+                    }
+                },
+                {
+                    "id": "asset-read-efficiency",
+                    "category": "INPUT",
+                    "type": "asset-read",
+                    "enabled": true,
+                    "config": {
+                        "attributePath": "/SiteB/LineA/Pump1/efficiency",
+                        "fireMode": "ON_CHANGE",
+                        "outputMode": "VALUE"
+                    }
+                },
                 {
                     "id": "modbus-in-1",
                     "category": "INPUT",
@@ -284,9 +313,16 @@
             ],
             "connections": [
                 {
-                    "id": "modbus-1-to-mqtt-1",
+                    "id": "modbus-1-to-asset-write",
                     "enabled": true,
                     "sourceNodeId": "modbus-in-1",
+                    "sourcePort": "default",
+                    "targetNodeId": "asset-write-flowRate"
+                },
+                {
+                    "id": "asset-read-to-mqtt",
+                    "enabled": true,
+                    "sourceNodeId": "asset-read-efficiency",
                     "sourcePort": "default",
                     "targetNodeId": "mqtt-out-1"
                 },

@@ -1,1 +1,3 @@
 nexa.plugin.asset.resource.AssetManagerResourcePlugin
+nexa.plugin.asset.node.AssetReadInputPlugin
+nexa.plugin.asset.node.AssetWriteSinkPlugin

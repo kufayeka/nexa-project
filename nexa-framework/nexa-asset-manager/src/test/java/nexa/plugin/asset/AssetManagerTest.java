@@ -185,4 +185,44 @@ public final class AssetManagerTest {
             plugin.triggerDependents("/SiteA/Line1/Motor1/temperature");
         });
     }
+
+    @Test
+    public void testAssetReadInputNode() throws Exception {
+        nexa.plugin.asset.node.AssetReadInputPlugin readNode = new nexa.plugin.asset.node.AssetReadInputPlugin();
+        readNode.onInit("read-test-id", Map.of(
+            "attributePath", "/SiteA/Line1/Motor1/temperature",
+            "fireMode", "ON_CHANGE",
+            "outputMode", "VALUE"
+        ), null);
+
+        java.util.List<nexa.framework.runtime.api.model.RuntimeMessage> emitted = new java.util.ArrayList<>();
+        readNode.setEmitter(emitted::add);
+        readNode.onStart();
+
+        // Write a new value to trigger change event
+        plugin.write("/SiteA/Line1/Motor1/temperature", 28.0);
+
+        assertEquals(1, emitted.size());
+        assertEquals(28.0, emitted.get(0).readRawValue("payload.value"));
+
+        readNode.onStop();
+    }
+
+    @Test
+    public void testAssetWriteSinkNode() throws Exception {
+        nexa.plugin.asset.node.AssetWriteSinkPlugin writeNode = new nexa.plugin.asset.node.AssetWriteSinkPlugin();
+        writeNode.onInit("write-test-id", Map.of(
+            "attributePath", "/SiteA/Line1/Motor1/temperature",
+            "valueSource", "payload.newValue"
+        ), null);
+        writeNode.onStart();
+
+        nexa.framework.runtime.api.model.RuntimeMessage msg = new nexa.framework.runtime.api.model.RuntimeMessage();
+        msg.writeValue("payload.newValue", 35.0);
+
+        writeNode.consume(msg);
+        assertEquals(35.0, plugin.read("/SiteA/Line1/Motor1/temperature"));
+
+        writeNode.onStop();
+    }
 }
