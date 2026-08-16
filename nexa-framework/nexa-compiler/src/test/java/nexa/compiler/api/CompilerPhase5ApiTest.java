@@ -39,7 +39,12 @@ class CompilerPhase5ApiTest {
 
     @Test
     void failedCompilationMayHaveDiagnosticsAndNoArtifact() {
-        var diagnostic = new CompilationDiagnostic("bad source", 0, 1);
+        var diagnostic = new CompilationDiagnostic(
+                CompilationDiagnostic.Severity.ERROR,
+                "E001",
+                "bad source",
+                1,
+                1);
         var result = new CompilationResult(false, List.of(diagnostic), null);
 
         assertFalse(result.successful());
