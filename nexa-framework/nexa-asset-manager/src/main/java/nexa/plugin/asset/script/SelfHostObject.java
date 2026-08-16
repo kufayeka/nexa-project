@@ -9,8 +9,9 @@ public final class SelfHostObject implements NexaHostObject {
     @Override
     public Object member(String name, int line, int column) {
         AssetManagerResourcePlugin manager = AssetManagerResourcePlugin.getActiveInstance();
-        AssetScriptingEngine engine = manager != null ? manager.getScriptingEngine() : null;
-        AssetScriptContext context = engine != null ? engine.currentContext() : null;
+        AssetScriptContext context = manager != null
+            ? AssetScriptingEngine.forManager(manager).currentContext()
+            : null;
 
         if (context == null) {
             throw new NexaScriptException(
