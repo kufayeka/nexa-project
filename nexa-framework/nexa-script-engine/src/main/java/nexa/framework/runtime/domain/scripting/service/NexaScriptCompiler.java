@@ -10,11 +10,35 @@ import nexa.framework.runtime.domain.scripting.internal.nexa.NexaProgram;
 import nexa.framework.runtime.domain.scripting.internal.nexa.NexaScriptException;
 import nexa.framework.runtime.domain.scripting.internal.nexa.NexaTokenizer;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
+/**
+ * Nexa DSL compiler. Compilation is a control-plane operation; execution uses
+ * the immutable CompiledScript returned by this compiler.
+ */
 public final class NexaScriptCompiler implements ScriptCompiler {
+
+    private final ConcurrentMap<String, CompiledScript> workspaceCache = new ConcurrentHashMap<>();
 
     @Override
     public CompiledScript compile(String scriptSource, String sourceName) {
+        return compileUncached(scriptSource, sourceName);
+    }
+
+    /** Compile once and retain the compiled program for the lifetime of a workspace deployment. */
+    public CompiledScript compile(String scriptSource, String sourceName, String workspaceId) {
+        if (workspaceId == null || workspaceId.isBlank()) {
+            return compile(scriptSource, sourceName);
+        }
+        String key = cacheKey(workspaceId, sourceName, scriptSource);
+        return workspaceCache.computeIfAbsent(key, ignored -> compileUncached(scriptSource, sourceName));
+    }
+
+    private CompiledScript compileUncached(String scriptSource, String sourceName) {
+        if (scriptSource == null || scriptSource.isBlank()) {
+            throw new ValidationException("Nexa script must not be empty: " + sourceName);
+        }
         try {
             NexaTokenizer tokenizer = new NexaTokenizer(scriptSource);
             NexaParser parser = new NexaParser(tokenizer.tokenize());
@@ -25,31 +49,48 @@ public final class NexaScriptCompiler implements ScriptCompiler {
         }
     }
 
-    /**
-     * Melakukan validasi sintaks skrip Nexa secara kering (dry-run).
-     * Menyimpan rincian error ke map jika parsing gagal.
-     */
+    /** Dry-run validation never populates the deployed workspace cache. */
     @Override
     public boolean validate(String scriptSource, Map<String, Object> errorContainer) {
         try {
-            NexaTokenizer tokenizer = new NexaTokenizer(scriptSource);
-            NexaParser parser = new NexaParser(tokenizer.tokenize());
-            parser.parseProgram();
+            compileUncached(scriptSource, "validation_dry_run");
             return true;
         } catch (NexaScriptException exception) {
-            if (errorContainer != null) {
-                errorContainer.put("line", exception.line());
-                errorContainer.put("column", exception.column());
-                errorContainer.put("message", exception.getMessage());
-            }
+            putDiagnostic(errorContainer, exception.line(), exception.column(), exception.getMessage());
             return false;
-        } catch (Exception e) {
-            if (errorContainer != null) {
-                errorContainer.put("line", 1);
-                errorContainer.put("column", 1);
-                errorContainer.put("message", e.getMessage());
-            }
+        } catch (Exception exception) {
+            putDiagnostic(errorContainer, 1, 1, exception.getMessage());
             return false;
+        }
+    }
+
+    @Override
+    public void clearWorkspace(String workspaceId) {
+        if (workspaceId == null || workspaceId.isBlank()) {
+            return;
+        }
+        String prefix = workspaceId + "\u0000";
+        workspaceCache.keySet().removeIf(key -> key.startsWith(prefix));
+    }
+
+    @Override
+    public void dispose() {
+        workspaceCache.clear();
+    }
+
+    public int cachedWorkspaceScriptCount() {
+        return workspaceCache.size();
+    }
+
+    private static String cacheKey(String workspaceId, String sourceName, String source) {
+        return workspaceId + "\u0000" + String.valueOf(sourceName) + "\u0000" + String.valueOf(source).hashCode();
+    }
+
+    private static void putDiagnostic(Map<String, Object> errorContainer, int line, int column, String message) {
+        if (errorContainer != null) {
+            errorContainer.put("line", line);
+            errorContainer.put("column", column);
+            errorContainer.put("message", message);
         }
     }
 
@@ -87,7 +128,6 @@ public final class NexaScriptCompiler implements ScriptCompiler {
         if (scriptSource == null || scriptSource.isBlank() || lineNumber < 1) {
             return "";
         }
-
         String[] lines = scriptSource.split("\\R", -1);
         if (lineNumber > lines.length) {
             return "";
@@ -95,5 +135,3 @@ public final class NexaScriptCompiler implements ScriptCompiler {
         return lines[lineNumber - 1].trim();
     }
 }
-
-
