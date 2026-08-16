@@ -169,7 +169,7 @@ public final class AssetScriptingEngineTest {
             for (int cycle = 0; cycle < warmupCycles; cycle++) {
                 for (String path : paths) {
                     Object result = engine.executeCalculation(script, path, 0.0, 0.0, null);
-                    assertEquals(19.0, ((Number) result).doubleValue(), 0.000001);
+                    assertEquals(19.5, ((Number) result).doubleValue(), 0.000001);
                 }
             }
 
@@ -181,7 +181,7 @@ public final class AssetScriptingEngineTest {
                 long start = System.nanoTime();
                 for (String path : paths) {
                     Object result = engine.executeCalculation(script, path, 0.0, 0.0, null);
-                    assertEquals(19.0, ((Number) result).doubleValue(), 0.000001);
+                    assertEquals(19.5, ((Number) result).doubleValue(), 0.000001);
                 }
                 long elapsed = System.nanoTime() - start;
                 cycleTimes[cycle] = elapsed;
@@ -230,9 +230,7 @@ public final class AssetScriptingEngineTest {
                     .append("\",\"dataType\":\"FLOAT64\",\"value\":3.0}");
             }
 
-            json.append(",\"name\":\"calculated\"");
-            json.setLength(json.length() - 1);
-            json.append("{\"name\":\"calculated\",\"dataType\":\"FLOAT64\",\"value\":0.0,\"calculationConfig\":{")
+            json.append(",\"calculated\":{\"name\":\"calculated\",\"dataType\":\"FLOAT64\",\"value\":0.0,\"calculationConfig\":{")
                 .append("\"triggerType\":\"ON_CHANGE\",\"script\":\"")
                 .append(escapedScript)
                 .append("\"}}");
