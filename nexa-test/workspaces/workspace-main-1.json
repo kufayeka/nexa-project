@@ -1,0 +1,511 @@
+{
+    "id": "workspace-mqtt-demo",
+    "enabled": true,
+    "resources": [
+        {
+            "id": "mqtt-pool-pabrik",
+            "type": "mqtt-client-pool",
+            "enabled": true,
+            "config": {
+                "name": "koneksi mqtt 1",
+                "brokerUrl": "tcp://broker.hivemq.com:1883",
+                "keepAlive": 60,
+                "clientId": "nexa-production-01",
+                "username": "",
+                "password": "",
+                "cleanSession": true,
+                "connectionTimeout": 30,
+                "automaticReconnect": true,
+                "publish": {
+                    "queue": {
+                        "enabled": true,
+                        "capacity": 50000,
+                        "overflowStrategy": "BLOCK"
+                    },
+                    "worker": {
+                        "threads": 5,
+                        "maxInflight": 5000
+                    }
+                }
+            }
+        },
+        {
+            "id": "mqtt-pool-pabrik-2",
+            "type": "mqtt-client-pool",
+            "enabled": true,
+            "config": {
+                "name": "koneksi mqtt 2",
+                "brokerUrl": "tcp://broker.hivemq.com:1883",
+                "keepAlive": 60,
+                "clientId": "nexa-production-02",
+                "username": "",
+                "password": "",
+                "cleanSession": true,
+                "connectionTimeout": 30,
+                "automaticReconnect": true,
+                "publish": {
+                    "queue": {
+                        "enabled": true,
+                        "capacity": 50000,
+                        "overflowStrategy": "BLOCK"
+                    },
+                    "worker": {
+                        "threads": 5,
+                        "maxInflight": 5000
+                    }
+                }
+            }
+        }
+    ],
+    "flows": [
+        {
+            "id": "mqtt-flow",
+            "name": "MQTT Production Pipeline",
+            "enabled": true,
+            "nodes": [
+                {
+                    "id": "mqtt-in-1",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-1",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 1; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-1",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/1"
+                    }
+                },
+                {
+                    "id": "mqtt-in-2",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-2",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 2; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-2",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/2"
+                    }
+                },
+                {
+                    "id": "mqtt-in-3",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-3",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 3; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-3",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/3"
+                    }
+                },
+                {
+                    "id": "mqtt-in-4",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-4",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 4; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-4",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/4"
+                    }
+                },
+                {
+                    "id": "mqtt-in-5",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-5",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 5; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-5",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/5"
+                    }
+                },
+                {
+                    "id": "mqtt-in-6",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-6",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 6; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-6",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/6"
+                    }
+                },
+                {
+                    "id": "mqtt-in-7",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-7",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 7; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-7",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/7"
+                    }
+                },
+                {
+                    "id": "mqtt-in-8",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-8",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 8; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-8",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/8"
+                    }
+                },
+                {
+                    "id": "mqtt-in-9",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-9",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 9; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-9",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/9"
+                    }
+                },
+                {
+                    "id": "mqtt-in-10",
+                    "category": "INPUT",
+                    "type": "mqtt-shared-input",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 1",
+                        "topic": "nexa/mes/sensor/data"
+                    }
+                },
+                {
+                    "id": "executor-10",
+                    "category": "EXECUTOR",
+                    "type": "script",
+                    "language": "nexa",
+                    "enabled": true,
+                    "config": {
+                        "script": "val raw = msg.payload.rawData; msg.payload.processorId = 10; msg.payload.processedData = raw.toUpperCase(); send(msg);"
+                    }
+                },
+                {
+                    "id": "mqtt-out-10",
+                    "category": "OUTPUT",
+                    "type": "mqtt-shared-sink",
+                    "enabled": true,
+                    "config": {
+                        "mqttClientPool": "koneksi mqtt 2",
+                        "topic": "nexa/mes/sensor/processed/10"
+                    }
+                }
+            ],
+            "connections": [
+                {
+                    "id": "conn-1-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-1",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-1"
+                },
+                {
+                    "id": "conn-1-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-1",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-1"
+                },
+                {
+                    "id": "conn-2-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-2",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-2"
+                },
+                {
+                    "id": "conn-2-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-2",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-2"
+                },
+                {
+                    "id": "conn-3-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-3",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-3"
+                },
+                {
+                    "id": "conn-3-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-3",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-3"
+                },
+                {
+                    "id": "conn-4-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-4",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-4"
+                },
+                {
+                    "id": "conn-4-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-4",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-4"
+                },
+                {
+                    "id": "conn-5-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-5",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-5"
+                },
+                {
+                    "id": "conn-5-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-5",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-5"
+                },
+                {
+                    "id": "conn-6-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-6",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-6"
+                },
+                {
+                    "id": "conn-6-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-6",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-6"
+                },
+                {
+                    "id": "conn-7-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-7",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-7"
+                },
+                {
+                    "id": "conn-7-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-7",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-7"
+                },
+                {
+                    "id": "conn-8-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-8",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-8"
+                },
+                {
+                    "id": "conn-8-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-8",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-8"
+                },
+                {
+                    "id": "conn-9-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-9",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-9"
+                },
+                {
+                    "id": "conn-9-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-9",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-9"
+                },
+                {
+                    "id": "conn-10-in-exec",
+                    "enabled": true,
+                    "sourceNodeId": "mqtt-in-10",
+                    "sourcePort": "default",
+                    "targetNodeId": "executor-10"
+                },
+                {
+                    "id": "conn-10-exec-out",
+                    "enabled": true,
+                    "sourceNodeId": "executor-10",
+                    "sourcePort": "default",
+                    "targetNodeId": "mqtt-out-10"
+                }
+            ]
+        }
+    ]
+}

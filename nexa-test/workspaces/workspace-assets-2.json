@@ -1,0 +1,77 @@
+{
+  "id": "workspace-assets-2",
+  "templates": [
+    {
+      "name": "PumpTemplate",
+      "attributes": [
+        {
+          "name": "flowRate",
+          "dataType": "FLOAT32",
+          "value": 0.0
+        },
+        {
+          "name": "inletPressure",
+          "dataType": "FLOAT32",
+          "value": 1.2
+        },
+        {
+          "name": "outletPressure",
+          "dataType": "FLOAT32",
+          "value": 4.5
+        },
+        {
+          "name": "efficiency",
+          "dataType": "FLOAT32",
+          "value": 0.0,
+          "calculationConfig": {
+            "triggerType": "ON_CHANGE",
+            "script": "return (assetManager.read(\"../outletPressure\") - assetManager.read(\"../inletPressure\")) * assetManager.read(\"../flowRate\") * 0.85;"
+          }
+        },
+        {
+          "name": "totalRunHours",
+          "dataType": "FLOAT64",
+          "value": 100.0,
+          "calculationConfig": {
+            "triggerType": "INTERVAL",
+            "intervalExpr": "1s",
+            "script": "return self.value + 0.01;"
+          }
+        },
+        {
+          "name": "status",
+          "dataType": "STRING",
+          "value": "STOPPED",
+          "calculationConfig": {
+            "triggerType": "ON_WRITE",
+            "script": "return self.newValue.toUpperCase();"
+          }
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "name": "SiteB",
+      "children": [
+        {
+          "name": "LineA",
+          "children": [
+            {
+              "name": "Pump1",
+              "template": "PumpTemplate",
+              "parameters": {},
+              "attributes": [
+                {
+                  "name": "location",
+                  "dataType": "STRING",
+                  "value": "Bay-4"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

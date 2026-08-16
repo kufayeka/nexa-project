@@ -1,0 +1,3 @@
+nexa.plugin.modbus.resource.ModbusConnectionPoolPlugin
+nexa.plugin.modbus.node.ModbusSharedInputPlugin
+nexa.plugin.modbus.node.ModbusSharedSinkPlugin

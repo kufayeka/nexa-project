@@ -8,7 +8,7 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":nexa-api"))
+    compileOnly(project(":nexa-api"))
     // Compile-time only: used to expose the real workspace schema in OpenAPI.
     // The runtime already provides nexa-core, so it must not be bundled into the control plugin JAR.
     compileOnly(project(":nexa-core"))
@@ -19,6 +19,12 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.0")
     implementation("io.moquette:moquette-broker:0.16")
     implementation("org.slf4j:slf4j-simple:2.0.12")
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
 }
 
 tasks.shadowJar {
