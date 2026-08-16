@@ -9,23 +9,23 @@ import nexa.framework.runtime.domain.scripting.internal.nexa.NexaTokenizer;
 import nexa.plugin.asset.resource.AssetManagerResourcePlugin;
 
 import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/** Asset Manager-owned scripting engine with per-manager compiled-script cache. */
+/**
+ * Scripting engine owned by one Asset Manager instance.
+ *
+ * Scripts are compiled once and their immutable programs are reused for every
+ * execution. Execution state is local to this engine instance and to the
+ * executing thread; no global Asset Manager scripting registry is required.
+ */
 public final class AssetScriptingEngine {
-    private static final Map<AssetManagerResourcePlugin, AssetScriptingEngine> ENGINES = new WeakHashMap<>();
-
-    public static synchronized AssetScriptingEngine forManager(AssetManagerResourcePlugin manager) {
-        return ENGINES.computeIfAbsent(manager, ignored -> new AssetScriptingEngine());
-    }
-
+    private final AssetManagerResourcePlugin assetManager;
     private final ConcurrentMap<String, CompiledAssetScript> compiledScripts = new ConcurrentHashMap<>();
     private final ThreadLocal<AssetScriptContext> currentContext = new ThreadLocal<>();
 
-    private AssetScriptingEngine() {
+    public AssetScriptingEngine(AssetManagerResourcePlugin assetManager) {
+        this.assetManager = assetManager;
     }
 
     public CompiledAssetScript compile(String source) {
@@ -43,7 +43,6 @@ public final class AssetScriptingEngine {
     }
 
     public Object executeCalculation(
-        AssetManagerResourcePlugin manager,
         String script,
         String attributePath,
         Object currentValue,
@@ -65,7 +64,7 @@ public final class AssetScriptingEngine {
             ScriptExecutionControl control = new ScriptExecutionControl((port, msg) -> {});
             NexaRuntime runtime = new NexaRuntime(new RuntimeMessage(), control);
             Object result = executeProgram(runtime, compiled.program());
-            manager.registerDependencies(attributePath, context.trackedReads());
+            assetManager.registerDependencies(attributePath, context.trackedReads());
             return result;
         } catch (Exception e) {
             throw new RuntimeException(
@@ -85,14 +84,33 @@ public final class AssetScriptingEngine {
             if (!e.getClass().getSimpleName().equals("ReturnSignal")) {
                 throw e;
             }
-            Method valueMethod = e.getClass().getDeclaredMethod("value");
-            valueMethod.setAccessible(true);
-            return valueMethod.invoke(e);
+            return extractReturnValue(e);
         }
+    }
+
+    private static volatile Method returnValueMethod;
+
+    private static Object extractReturnValue(RuntimeException signal) throws Exception {
+        Method method = returnValueMethod;
+        if (method == null) {
+            synchronized (AssetScriptingEngine.class) {
+                method = returnValueMethod;
+                if (method == null) {
+                    method = signal.getClass().getDeclaredMethod("value");
+                    method.setAccessible(true);
+                    returnValueMethod = method;
+                }
+            }
+        }
+        return method.invoke(signal);
     }
 
     public AssetScriptContext currentContext() {
         return currentContext.get();
+    }
+
+    public boolean isExecuting() {
+        return currentContext.get() != null;
     }
 
     public int compiledScriptCount() {
