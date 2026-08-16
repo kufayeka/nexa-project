@@ -10,7 +10,7 @@ public final class SelfHostObject implements NexaHostObject {
     public Object member(String name, int line, int column) {
         AssetManagerResourcePlugin manager = AssetManagerResourcePlugin.getActiveInstance();
         AssetScriptContext context = manager != null
-            ? AssetScriptingEngine.forManager(manager).currentContext()
+            ? manager.getScriptingEngine().currentContext()
             : null;
 
         if (context == null) {
