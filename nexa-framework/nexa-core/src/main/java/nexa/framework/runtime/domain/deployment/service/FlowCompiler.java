@@ -60,7 +60,6 @@ public final class FlowCompiler {
             if (compiledFlow == null) {
                 compiledFlow = compileFlow(definition.id(), flowDefinition);
             } else {
-                // Runtime control mutates compiled connection state. Re-apply the persisted definition state on redeploy.
                 for (ConnectionDefinition connection : flowDefinition.connections()) {
                     compiledFlow.setConnectionEnabled(connection.id(), Boolean.TRUE.equals(connection.enabled()));
                 }
@@ -109,7 +108,11 @@ public final class FlowCompiler {
         workspaceCompilationCache.remove(workspaceId);
         scriptEngineRegistry.invalidateWorkspace(workspaceId);
     }
-    public void dispose() { workspaceCompilationCache.clear(); scriptEngineRegistry.dispose(); }
+
+    public void dispose() {
+        workspaceCompilationCache.clear();
+        scriptEngineRegistry.dispose();
+    }
 
     private CompiledFlow resolveCachedFlow(WorkspaceCompilationSnapshot snapshot, String flowId, String flowSignature) {
         if (snapshot == null) return null;
@@ -177,7 +180,7 @@ public final class FlowCompiler {
         if (language == null || language.isBlank()) throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId + " requires language");
         ScriptEngine scriptEngine = scriptEngineRegistry.require(language, flowId, nodeDefinition.id());
         LOGGER.log(System.Logger.Level.INFO, "Compile script workspace={0} flow={1} node={2} language={3}", workspaceId, flowId, nodeDefinition.id(), language);
-        return scriptEngine.compiler().compile(scriptSource, workspaceId + ":" + flowId + ":" + nodeDefinition.id());
+        return scriptEngine.compiler().compile(scriptSource, workspaceId + ":" + flowId + ":" + nodeDefinition.id(), workspaceId);
     }
 
     private String resolveLanguage(NodeDefinition nodeDefinition) {
