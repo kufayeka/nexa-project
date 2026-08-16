@@ -2,6 +2,8 @@ package nexa.compiler.ir;
 
 import java.util.*;
 
+import nexa.compiler.lang.NexaType;
+
 /**
  * Small, deterministic, backend-neutral optimizer for Nexa IR.
  *
@@ -13,27 +15,18 @@ public final class NexaIrOptimizer {
 
     public NexaIr.Program optimize(NexaIr.Program program) {
         Objects.requireNonNull(program, "program");
-
-        List<NexaIr.Function> functions = program.functions().stream()
-                .map(this::optimizeFunction)
-                .toList();
-
         return new NexaIr.Program(
                 program.name(),
-                functions,
+                program.functions().stream().map(this::optimizeFunction).toList(),
                 program.types(),
                 program.irVersion());
     }
 
     private NexaIr.Function optimizeFunction(NexaIr.Function function) {
-        List<NexaIr.Block> blocks = function.blocks().stream()
-                .map(this::optimizeBlock)
-                .toList();
-
         return new NexaIr.Function(
                 function.name(),
                 function.locals(),
-                blocks,
+                function.blocks().stream().map(this::optimizeBlock).toList(),
                 function.returnType(),
                 function.parameters());
     }
@@ -60,61 +53,93 @@ public final class NexaIrOptimizer {
             NexaIr.Instruction instruction,
             Map<Integer, ConstValue> constants) {
 
-        if (!(instruction instanceof NexaIr.Binary binary)) {
-            return instruction;
-        }
+        if (!(instruction instanceof NexaIr.Binary binary)) return instruction;
 
         ConstValue left = constants.get(binary.left().id());
         ConstValue right = constants.get(binary.right().id());
-        if (left == null || right == null) {
-            return instruction;
-        }
+        if (left == null || right == null) return instruction;
 
-        Object value = evaluate(binary.op(), left.value(), right.value());
-        if (value == NO_FOLD) {
-            return instruction;
-        }
+        Object folded = evaluate(
+                binary.op(),
+                left,
+                right,
+                binary.result().type());
 
-        return new NexaIr.Const(binary.result(), value, binary.span());
+        if (folded == NO_FOLD) return instruction;
+        return new NexaIr.Const(binary.result(), folded, binary.span());
     }
 
     private static final Object NO_FOLD = new Object();
 
-    private Object evaluate(String op, Object left, Object right) {
-        if (left instanceof Number l && right instanceof Number r) {
-            double a = l.doubleValue();
-            double b = r.doubleValue();
+    private Object evaluate(
+            String op,
+            ConstValue left,
+            ConstValue right,
+            NexaType resultType) {
 
+        Object a = left.value();
+        Object b = right.value();
+
+        if (a instanceof Number leftNumber && b instanceof Number rightNumber) {
+            boolean floating = resultType.displayName().startsWith("FLOAT");
+
+            if (floating) {
+                double x = leftNumber.doubleValue();
+                double y = rightNumber.doubleValue();
+                return switch (op) {
+                    case "+" -> x + y;
+                    case "-" -> x - y;
+                    case "*" -> x * y;
+                    case "/" -> y == 0.0 ? NO_FOLD : x / y;
+                    case "==" -> Double.compare(x, y) == 0;
+                    case "!=" -> Double.compare(x, y) != 0;
+                    case "<" -> x < y;
+                    case "<=" -> x <= y;
+                    case ">" -> x > y;
+                    case ">=" -> x >= y;
+                    default -> NO_FOLD;
+                };
+            }
+
+            long x = leftNumber.longValue();
+            long y = rightNumber.longValue();
+            try {
+                return switch (op) {
+                    case "+" -> Math.addExact(x, y);
+                    case "-" -> Math.subtractExact(x, y);
+                    case "*" -> Math.multiplyExact(x, y);
+                    // Do not fold integer division unless the result is exact;
+                    // this keeps the optimizer independent of the backend's
+                    // integer-division rounding semantics.
+                    case "/" -> y == 0 || x % y != 0 ? NO_FOLD : x / y;
+                    case "==" -> x == y;
+                    case "!=" -> x != y;
+                    case "<" -> x < y;
+                    case "<=" -> x <= y;
+                    case ">" -> x > y;
+                    case ">=" -> x >= y;
+                    default -> NO_FOLD;
+                };
+            } catch (ArithmeticException overflow) {
+                return NO_FOLD;
+            }
+        }
+
+        if (a instanceof Boolean leftBoolean && b instanceof Boolean rightBoolean) {
             return switch (op) {
-                case "+" -> numericResult(left, right, a + b);
-                case "-" -> numericResult(left, right, a - b);
-                case "*" -> numericResult(left, right, a * b);
-                case "/" -> b == 0.0 ? NO_FOLD : numericResult(left, right, a / b);
-                case "==" -> Double.compare(a, b) == 0;
-                case "!=" -> Double.compare(a, b) != 0;
-                case "<" -> a < b;
-                case "<=" -> a <= b;
-                case ">" -> a > b;
-                case ">=" -> a >= b;
+                case "&&" -> leftBoolean && rightBoolean;
+                case "||" -> leftBoolean || rightBoolean;
+                case "==" -> leftBoolean.equals(rightBoolean);
+                case "!=" -> !leftBoolean.equals(rightBoolean);
                 default -> NO_FOLD;
             };
         }
 
-        if (left instanceof Boolean a && right instanceof Boolean b) {
+        if (a instanceof String leftString && b instanceof String rightString) {
             return switch (op) {
-                case "&&" -> a && b;
-                case "||" -> a || b;
-                case "==" -> a.equals(b);
-                case "!=" -> !a.equals(b);
-                default -> NO_FOLD;
-            };
-        }
-
-        if (left instanceof String a && right instanceof String b) {
-            return switch (op) {
-                case "==" -> a.equals(b);
-                case "!=" -> !a.equals(b);
-                case "+" -> a + b;
+                case "==" -> leftString.equals(rightString);
+                case "!=" -> !leftString.equals(rightString);
+                case "+" -> leftString + rightString;
                 default -> NO_FOLD;
             };
         }
@@ -122,18 +147,5 @@ public final class NexaIrOptimizer {
         return NO_FOLD;
     }
 
-    private Object numericResult(Object left, Object right, double value) {
-        if (left instanceof Float || right instanceof Float
-                || left instanceof Double || right instanceof Double) {
-            return value;
-        }
-
-        long rounded = Math.round(value);
-        if (left instanceof Integer || right instanceof Integer) return (int) rounded;
-        if (left instanceof Short || right instanceof Short) return (short) rounded;
-        if (left instanceof Byte || right instanceof Byte) return (byte) rounded;
-        return rounded;
-    }
-
-    private record ConstValue(Object value, nexa.compiler.lang.NexaType type) {}
+    private record ConstValue(Object value, NexaType type) {}
 }
