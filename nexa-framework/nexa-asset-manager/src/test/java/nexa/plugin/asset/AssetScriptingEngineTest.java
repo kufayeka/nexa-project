@@ -230,7 +230,7 @@ public final class AssetScriptingEngineTest {
                     .append("\",\"dataType\":\"FLOAT64\",\"value\":3.0}");
             }
 
-            json.append(",\"calculated\":{\"name\":\"calculated\",\"dataType\":\"FLOAT64\",\"value\":0.0,\"calculationConfig\":{")
+            json.append(", {\"name\":\"calculated\",\"dataType\":\"FLOAT64\",\"value\":0.0,\"calculationConfig\":{")
                 .append("\"triggerType\":\"ON_CHANGE\",\"script\":\"")
                 .append(escapedScript)
                 .append("\"}}");
