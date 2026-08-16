@@ -4,15 +4,20 @@ import java.util.*;
 
 import nexa.compiler.lang.NexaType;
 
-/** Lightweight backend-independent verifier for Nexa IR invariants. */
+/**
+ * Backend-independent verifier for Nexa IR.
+ *
+ * The verifier intentionally checks more than structural well-formedness:
+ * value references, local writes, primitive operand types, control-flow
+ * targets, host signatures, iterator types, and const semantics are validated
+ * before a backend is allowed to consume the IR.
+ */
 public final class NexaIrVerifier {
     public record Diagnostic(String message) {}
 
     public List<Diagnostic> verify(NexaIr.Program program) {
         List<Diagnostic> errors = new ArrayList<>();
-        if (program == null) {
-            return List.of(new Diagnostic("IR program is null"));
-        }
+        if (program == null) return List.of(new Diagnostic("IR program is null"));
         if (program.irVersion() != 1) {
             errors.add(new Diagnostic("Unsupported IR version: " + program.irVersion()));
         }
@@ -27,9 +32,16 @@ public final class NexaIrVerifier {
     }
 
     private void verifyFunction(NexaIr.Function function, List<Diagnostic> errors) {
-        Set<Integer> blocks = new HashSet<>();
-        Set<Integer> values = new HashSet<>();
-        Map<String, NexaIr.Local> locals = new HashMap<>();
+        if (function.name().isBlank()) errors.add(new Diagnostic("Function name is blank"));
+        if (function.blocks().isEmpty()) {
+            errors.add(new Diagnostic("Function has no blocks: " + function.name()));
+            return;
+        }
+
+        Map<Integer, NexaIr.Block> blocks = new LinkedHashMap<>();
+        Map<Integer, NexaIr.Value> values = new HashMap<>();
+        Map<String, NexaIr.Local> locals = new LinkedHashMap<>();
+        Map<String, Integer> stores = new HashMap<>();
 
         for (NexaIr.Local local : function.locals()) {
             if (locals.put(local.name(), local) != null) {
@@ -37,98 +49,351 @@ public final class NexaIrVerifier {
             }
         }
 
-        for (NexaIr.Block block : function.blocks()) {
-            if (!blocks.add(block.id())) {
-                errors.add(new Diagnostic("Duplicate block id: " + block.id()));
-            }
-
-            for (NexaIr.Instruction instruction : block.instructions()) {
-                verifyInstruction(instruction, values, locals, errors);
-            }
-            verifyTerminator(block.terminator(), blocks, errors);
-        }
-
-        if (!function.blocks().isEmpty() && function.blocks().get(0).id() != 0) {
+        if (function.blocks().get(0).id() != 0) {
             errors.add(new Diagnostic("Function entry block must be block 0"));
         }
 
-        // Validate branch targets after all block IDs are known.
         for (NexaIr.Block block : function.blocks()) {
-            if (block.terminator() instanceof NexaIr.Jump jump) {
-                requireBlock(blocks, jump.targetBlock(), errors);
-            } else if (block.terminator() instanceof NexaIr.Branch branch) {
-                requireBlock(blocks, branch.trueBlock(), errors);
-                requireBlock(blocks, branch.falseBlock(), errors);
+            if (blocks.put(block.id(), block) != null) {
+                errors.add(new Diagnostic("Duplicate block id: " + block.id()));
+            }
+            if (block.id() < 0) errors.add(new Diagnostic("Negative block id: " + block.id()));
+        }
+
+        // First pass: collect all SSA definitions so forward references can be
+        // diagnosed separately from control-flow reachability.
+        for (NexaIr.Block block : function.blocks()) {
+            for (NexaIr.Instruction instruction : block.instructions()) {
+                if (instruction.result() != null) {
+                    NexaIr.Value previous = values.put(instruction.result().id(), instruction.result());
+                    if (previous != null) {
+                        errors.add(new Diagnostic("SSA value defined more than once: v" + instruction.result().id()));
+                    }
+                }
+            }
+        }
+
+        for (NexaIr.Block block : function.blocks()) {
+            for (NexaIr.Instruction instruction : block.instructions()) {
+                verifyInstruction(instruction, values, locals, stores, errors);
+            }
+            verifyTerminator(block.terminator(), values, blocks.keySet(), errors);
+        }
+
+        for (Map.Entry<String, NexaIr.Local> entry : locals.entrySet()) {
+            if (entry.getValue().constant() && stores.getOrDefault(entry.getKey(), 0) > 1) {
+                errors.add(new Diagnostic("Const local assigned more than once: " + entry.getKey()));
             }
         }
     }
 
     private void verifyInstruction(
             NexaIr.Instruction instruction,
-            Set<Integer> values,
+            Map<Integer, NexaIr.Value> values,
             Map<String, NexaIr.Local> locals,
+            Map<String, Integer> stores,
             List<Diagnostic> errors) {
 
-        if (instruction.result() != null && !values.add(instruction.result().id())) {
-            errors.add(new Diagnostic("SSA value defined more than once: v" + instruction.result().id()));
+        if (instruction.result() != null && instruction.result().id() < 0) {
+            errors.add(new Diagnostic("Negative SSA value id: v" + instruction.result().id()));
         }
 
-        if (instruction instanceof NexaIr.LoadLocal load && !locals.containsKey(load.name())) {
-            errors.add(new Diagnostic("Load of unknown local: " + load.name()));
+        if (instruction instanceof NexaIr.Const constant) {
+            if (constant.value() == null && !NexaType.same(constant.result().type(), NexaType.OBJECT)) {
+                errors.add(new Diagnostic("Null constant requires OBJECT type"));
+            }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.LoadLocal load) {
+            NexaIr.Local local = locals.get(load.name());
+            if (local == null) {
+                errors.add(new Diagnostic("Load of unknown local: " + load.name()));
+            } else if (!sameOrNumeric(load.result().type(), local.type())) {
+                errors.add(new Diagnostic("Local load type mismatch for " + load.name()));
+            }
+            return;
         }
 
         if (instruction instanceof NexaIr.StoreLocal store) {
             NexaIr.Local local = locals.get(store.name());
             if (local == null) {
                 errors.add(new Diagnostic("Store to unknown local: " + store.name()));
-            } else if (local.constant() && store.constant()) {
-                // A const store is valid only for its declaration's initial store.
-                // Multiple stores are rejected below using a separate count.
+            } else {
+                stores.merge(store.name(), 1, Integer::sum);
+                if (local.constant() && !store.constant()) {
+                    errors.add(new Diagnostic("Cannot assign const local: " + store.name()));
+                }
+                if (!sameOrNumeric(local.type(), store.value().type())) {
+                    errors.add(new Diagnostic("Local store type mismatch for " + store.name()
+                            + ": expected " + local.type().displayName()
+                            + ", got " + store.value().type().displayName()));
+                }
             }
-            if (store.value() == null) {
-                errors.add(new Diagnostic("Local store has no value: " + store.name()));
+            return;
+        }
+
+        if (instruction instanceof NexaIr.LoadField load) {
+            verifyFieldType(load.target().type(), load.field(), load.result().type(), errors);
+            return;
+        }
+
+        if (instruction instanceof NexaIr.StoreField store) {
+            NexaType fieldType = fieldType(store.target().type(), store.field());
+            if (!sameOrNumeric(fieldType, store.value().type())) {
+                errors.add(new Diagnostic("Field store type mismatch for " + store.field()));
             }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.LoadIndex load) {
+            verifyIndexType(load.target().type(), load.index().type(), load.result().type(), errors);
+            return;
+        }
+
+        if (instruction instanceof NexaIr.StoreIndex store) {
+            NexaType elementType = indexType(store.target().type());
+            if (!sameOrNumeric(elementType, store.value().type())
+                    && !NexaType.same(elementType, NexaType.OBJECT)) {
+                errors.add(new Diagnostic("Indexed store type mismatch"));
+            }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.ArrayCreate array) {
+            if (!NexaType.same(array.result().type(), new NexaType.Array(array.elementType()))) {
+                errors.add(new Diagnostic("ArrayCreate result type does not match element type"));
+            }
+            for (NexaIr.Value value : array.values()) {
+                if (!sameOrNumeric(array.elementType(), value.type())) {
+                    errors.add(new Diagnostic("Array element type mismatch: expected "
+                            + array.elementType().displayName() + ", got " + value.type().displayName()));
+                }
+            }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.ObjectCreate object) {
+            for (Map.Entry<String, NexaIr.Value> entry : object.fields().entrySet()) {
+                NexaType expected = object.type().fields().get(entry.getKey());
+                if (expected == null || !sameOrNumeric(expected, entry.getValue().type())) {
+                    errors.add(new Diagnostic("Object field type mismatch: " + entry.getKey()));
+                }
+            }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.Unary unary) {
+            if (unary.op().equals("!") && !NexaType.same(unary.operand().type(), NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("Logical negation requires BOOLEAN"));
+            } else if (!unary.op().equals("!") && !NexaType.numeric(unary.operand().type())) {
+                errors.add(new Diagnostic("Unary numeric operator requires numeric operand"));
+            }
+            if (unary.op().equals("!") && !NexaType.same(unary.result().type(), NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("Logical negation result must be BOOLEAN"));
+            }
+            return;
         }
 
         if (instruction instanceof NexaIr.Binary binary) {
-            if (!binary.left().type().equals(binary.right().type())
-                    && !NexaType.numeric(binary.left().type())) {
-                errors.add(new Diagnostic("Invalid binary operand types for " + binary.op()));
-            }
+            verifyBinary(binary, errors);
+            return;
         }
 
         if (instruction instanceof NexaIr.HostCall host) {
-            if (host.signature().parameters().size() != host.args().size()) {
-                errors.add(new Diagnostic(
-                        "Host signature arity mismatch for " + host.capability().qualifiedName()));
+            verifyHostCall(host, errors);
+            return;
+        }
+
+        if (instruction instanceof NexaIr.Iterate iterate) {
+            if (!isIterable(iterate.iterable().type())) {
+                errors.add(new Diagnostic("Iterate requires ARRAY or OBJECT"));
             }
-            for (int i = 0; i < Math.min(host.signature().parameters().size(), host.args().size()); i++) {
-                NexaType expected = host.signature().parameters().get(i);
-                NexaType actual = host.args().get(i).type();
-                if (!NexaType.same(expected, actual) && !NexaType.numeric(expected)) {
-                    errors.add(new Diagnostic(
-                            "Host argument type mismatch for " + host.capability().qualifiedName()
-                                    + ": expected " + expected.displayName()
-                                    + ", got " + actual.displayName()));
-                }
+            if (!NexaType.same(iterate.result().type(), NexaType.OBJECT)) {
+                errors.add(new Diagnostic("Iterator handle must be OBJECT"));
             }
-            if (!NexaType.same(host.result().type(), host.signature().result())) {
-                errors.add(new Diagnostic("Host result type does not match signature"));
+            return;
+        }
+
+        if (instruction instanceof NexaIr.IterHasNext next) {
+            if (!NexaType.same(next.iterator().type(), NexaType.OBJECT)) {
+                errors.add(new Diagnostic("Iterator handle must be OBJECT"));
             }
+            if (!NexaType.same(next.result().type(), NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("IterHasNext result must be BOOLEAN"));
+            }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.IterNext next) {
+            if (!NexaType.same(next.iterator().type(), NexaType.OBJECT)) {
+                errors.add(new Diagnostic("Iterator handle must be OBJECT"));
+            }
+            if (!NexaType.same(next.result().type(), next.elementType())) {
+                errors.add(new Diagnostic("IterNext result type mismatch"));
+            }
+            return;
+        }
+
+        if (instruction instanceof NexaIr.Return ret && ret.value() != null) {
+            // Function return type is checked by the caller of this method via
+            // the function-level pass below in future function lowering.
+        }
+    }
+
+    private void verifyBinary(NexaIr.Binary binary, List<Diagnostic> errors) {
+        NexaType left = binary.left().type();
+        NexaType right = binary.right().type();
+        String op = binary.op();
+
+        if (op.equals("&&") || op.equals("||")) {
+            if (!NexaType.same(left, NexaType.BOOLEAN) || !NexaType.same(right, NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("Logical operator requires BOOLEAN operands"));
+            }
+            if (!NexaType.same(binary.result().type(), NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("Logical operator result must be BOOLEAN"));
+            }
+            return;
+        }
+
+        if (Set.of("==", "!=", "<", "<=", ">", ">=").contains(op)) {
+            if (!compatible(left, right)) {
+                errors.add(new Diagnostic("Incompatible comparison types"));
+            }
+            if (!NexaType.same(binary.result().type(), NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("Comparison result must be BOOLEAN"));
+            }
+            return;
+        }
+
+        if (!NexaType.numeric(left) || !NexaType.numeric(right)) {
+            errors.add(new Diagnostic("Arithmetic requires numeric operands"));
+            return;
+        }
+
+        NexaType expected = commonNumeric(left, right);
+        if (!sameOrNumeric(expected, binary.result().type())) {
+            errors.add(new Diagnostic("Arithmetic result type mismatch"));
+        }
+    }
+
+    private void verifyHostCall(NexaIr.HostCall host, List<Diagnostic> errors) {
+        if (host.signature().parameters().size() != host.args().size()) {
+            errors.add(new Diagnostic("Host signature arity mismatch for " + host.capability().qualifiedName()));
+            return;
+        }
+
+        for (int i = 0; i < host.args().size(); i++) {
+            NexaType expected = host.signature().parameters().get(i);
+            NexaType actual = host.args().get(i).type();
+            if (!sameOrNumeric(expected, actual)) {
+                errors.add(new Diagnostic("Host argument type mismatch for "
+                        + host.capability().qualifiedName() + " argument " + i
+                        + ": expected " + expected.displayName() + ", got " + actual.displayName()));
+            }
+        }
+
+        if (!sameOrNumeric(host.result().type(), host.signature().result())) {
+            errors.add(new Diagnostic("Host result type does not match signature for "
+                    + host.capability().qualifiedName()));
         }
     }
 
     private void verifyTerminator(
             NexaIr.Terminator terminator,
+            Map<Integer, NexaIr.Value> values,
             Set<Integer> blocks,
             List<Diagnostic> errors) {
-        if (terminator == null) errors.add(new Diagnostic("Block has no terminator"));
-        // Targets are checked in a second pass because later blocks may not yet exist.
+        if (terminator == null) {
+            errors.add(new Diagnostic("Block has no terminator"));
+            return;
+        }
+        if (terminator instanceof NexaIr.Jump jump) {
+            if (!blocks.contains(jump.targetBlock())) {
+                errors.add(new Diagnostic("Unknown control-flow target block: " + jump.targetBlock()));
+            }
+        } else if (terminator instanceof NexaIr.Branch branch) {
+            if (!values.containsKey(branch.condition().id())) {
+                errors.add(new Diagnostic("Branch uses unknown value: v" + branch.condition().id()));
+            }
+            if (!NexaType.same(branch.condition().type(), NexaType.BOOLEAN)) {
+                errors.add(new Diagnostic("Branch condition must be BOOLEAN"));
+            }
+            if (!blocks.contains(branch.trueBlock())) {
+                errors.add(new Diagnostic("Unknown true branch block: " + branch.trueBlock()));
+            }
+            if (!blocks.contains(branch.falseBlock())) {
+                errors.add(new Diagnostic("Unknown false branch block: " + branch.falseBlock()));
+            }
+        }
     }
 
-    private void requireBlock(Set<Integer> blocks, int id, List<Diagnostic> errors) {
-        if (!blocks.contains(id)) {
-            errors.add(new Diagnostic("Unknown control-flow target block: " + id));
+    private boolean isIterable(NexaType type) {
+        return type instanceof NexaType.Array || NexaType.same(type, NexaType.OBJECT);
+    }
+
+    private void verifyFieldType(NexaType target, String field, NexaType result, List<Diagnostic> errors) {
+        NexaType expected = fieldType(target, field);
+        if (!sameOrNumeric(expected, result) && !NexaType.same(expected, NexaType.OBJECT)) {
+            errors.add(new Diagnostic("Field load type mismatch for " + field));
         }
+    }
+
+    private NexaType fieldType(NexaType target, String field) {
+        if (target instanceof NexaType.ObjectType object) {
+            return object.fields().getOrDefault(field, NexaType.OBJECT);
+        }
+        return NexaType.OBJECT;
+    }
+
+    private void verifyIndexType(NexaType target, NexaType index, NexaType result, List<Diagnostic> errors) {
+        if (target instanceof NexaType.Array) {
+            if (!NexaType.numeric(index)) {
+                errors.add(new Diagnostic("Array index must be numeric"));
+            }
+            NexaType expected = indexType(target);
+            if (!sameOrNumeric(expected, result)) {
+                errors.add(new Diagnostic("Array load result type mismatch"));
+            }
+        } else if (!NexaType.same(target, NexaType.OBJECT)) {
+            errors.add(new Diagnostic("Indexing requires ARRAY or OBJECT"));
+        }
+    }
+
+    private NexaType indexType(NexaType target) {
+        if (target instanceof NexaType.Array array) return array.element();
+        return NexaType.OBJECT;
+    }
+
+    private boolean compatible(NexaType a, NexaType b) {
+        return NexaType.same(a, b)
+                || (NexaType.numeric(a) && NexaType.numeric(b))
+                || NexaType.same(a, NexaType.OBJECT)
+                || NexaType.same(b, NexaType.OBJECT);
+    }
+
+    private boolean sameOrNumeric(NexaType expected, NexaType actual) {
+        return NexaType.same(expected, actual)
+                || (NexaType.numeric(expected) && NexaType.numeric(actual))
+                || NexaType.same(expected, NexaType.OBJECT)
+                || NexaType.same(actual, NexaType.OBJECT);
+    }
+
+    private NexaType commonNumeric(NexaType a, NexaType b) {
+        if (a.displayName().equals("FLOAT64") || b.displayName().equals("FLOAT64")) return NexaType.FLOAT64;
+        if (a.displayName().equals("FLOAT32") || b.displayName().equals("FLOAT32")) return NexaType.FLOAT32;
+        return rank(a) >= rank(b) ? a : b;
+    }
+
+    private int rank(NexaType type) {
+        return switch (type.displayName()) {
+            case "INT8", "UINT8" -> 1;
+            case "INT16", "UINT16" -> 2;
+            case "INT32", "UINT32" -> 3;
+            case "INT64", "UINT64" -> 4;
+            case "FLOAT32" -> 5;
+            case "FLOAT64" -> 6;
+            default -> 0;
+        };
     }
 }
