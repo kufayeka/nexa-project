@@ -83,7 +83,7 @@ public final class NexaScriptCompiler implements ScriptCompiler {
     }
 
     private static String cacheKey(String workspaceId, String sourceName, String source) {
-        return workspaceId + "\u0000" + String.valueOf(sourceName) + "\u0000" + String.valueOf(source).hashCode();
+        return workspaceId + "\u0000" + String.valueOf(sourceName) + "\u0000" + String.valueOf(source);
     }
 
     private static void putDiagnostic(Map<String, Object> errorContainer, int line, int column, String message) {
