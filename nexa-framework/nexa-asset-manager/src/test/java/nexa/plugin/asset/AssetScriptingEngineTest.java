@@ -218,7 +218,7 @@ public final class AssetScriptingEngineTest {
     private static String buildWorkspaceJson(int calculatedTags, int sourceTagsPerCalculation, String script) {
         String escapedScript = script.replace("\\", "\\\\").replace("\"", "\\\"");
         StringBuilder json = new StringBuilder();
-        json.append("{\"id\":\"hardcore\",\"templates\":[],\"assets\":[");
+        json.append("{\"id\":\"hardcore\",\"templates\":[],\"assets\":[{\"name\":\"Bench\",\"children\":[");
 
         for (int i = 0; i < calculatedTags; i++) {
             if (i > 0) json.append(',');
@@ -230,14 +230,14 @@ public final class AssetScriptingEngineTest {
                     .append("\",\"dataType\":\"FLOAT64\",\"value\":3.0}");
             }
 
-            json.append(", {\"name\":\"calculated\",\"dataType\":\"FLOAT64\",\"value\":0.0,\"calculationConfig\":{")
+            json.append(",{\"name\":\"calculated\",\"dataType\":\"FLOAT64\",\"value\":0.0,\"calculationConfig\":{")
                 .append("\"triggerType\":\"ON_CHANGE\",\"script\":\"")
                 .append(escapedScript)
                 .append("\"}}");
             json.append("]}");
         }
 
-        json.append("]}");
-        return json.toString();
+        json.append("]}]} ");
+        return json.toString().trim();
     }
 }
