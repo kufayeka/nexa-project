@@ -33,8 +33,11 @@ public final class NexaSemanticChecker {
 
     private void stmt(Stmt statement) {
         if (statement instanceof TypeDecl declaration) {
-            if (types.containsKey(declaration.name())) bad("Type already defined: " + declaration.name(), declaration.span());
-            else types.put(declaration.name(), resolve(declaration.type()));
+            if (types.containsKey(declaration.name())) {
+                bad("Type already defined: " + declaration.name(), declaration.span());
+            } else {
+                types.put(declaration.name(), resolve(declaration.type()));
+            }
             return;
         }
 
@@ -51,6 +54,7 @@ public final class NexaSemanticChecker {
                 bad("Assignment target is not writable", assignment.target().span());
                 return;
             }
+
             if (assignment.target() instanceof Var variable) {
                 Symbol symbol = lookupSymbol(variable.name());
                 if (symbol != null && symbol.constant()) {
@@ -59,14 +63,22 @@ public final class NexaSemanticChecker {
                     return;
                 }
             }
+
             NexaType targetType = expr(assignment.target());
             NexaType valueType = expr(assignment.value());
             require(targetType, valueType, assignment.value(), "assignment");
             return;
         }
 
-        if (statement instanceof Return ret) { expr(ret.value()); return; }
-        if (statement instanceof ExprStmt expressionStatement) { expr(expressionStatement.expr()); return; }
+        if (statement instanceof Return ret) {
+            expr(ret.value());
+            return;
+        }
+
+        if (statement instanceof ExprStmt expressionStatement) {
+            expr(expressionStatement.expr());
+            return;
+        }
 
         if (statement instanceof For loop) {
             NexaType iterableType = resolve(expr(loop.iterable()));
@@ -74,8 +86,10 @@ public final class NexaSemanticChecker {
                 bad("'in' requires ARRAY<T>", loop.iterable().span());
                 return;
             }
+
             NexaType declaredLoopType = resolve(loop.declaredType());
             require(declaredLoopType, resolve(array.element()), loop.iterable(), "loop variable");
+
             scopes.push(new HashMap<>());
             define(loop.name(), declaredLoopType, false);
             for (Stmt bodyStatement : loop.body()) stmt(bodyStatement);
@@ -87,7 +101,9 @@ public final class NexaSemanticChecker {
     }
 
     private NexaType expr(Expr expression) {
-        if (expression instanceof Literal literal) return resolve(literal.type());
+        if (expression instanceof Literal literal) {
+            return resolve(literal.type());
+        }
 
         if (expression instanceof Var variable) {
             Symbol symbol = lookupSymbol(variable.name());
@@ -101,11 +117,16 @@ public final class NexaSemanticChecker {
         if (expression instanceof Field field) {
             NexaType targetType = resolve(expr(field.target()));
             if (NexaType.same(targetType, NexaType.OBJECT)) return NexaType.OBJECT;
+
             if (targetType instanceof NexaType.ObjectType objectType) {
                 NexaType fieldType = objectType.fields().get(field.name());
-                if (fieldType == null) { bad("Unknown field '" + field.name() + "'", field.span()); return NexaType.OBJECT; }
+                if (fieldType == null) {
+                    bad("Unknown field '" + field.name() + "'", field.span());
+                    return NexaType.OBJECT;
+                }
                 return resolve(fieldType);
             }
+
             bad("Field access requires OBJECT/struct", field.span());
             return NexaType.OBJECT;
         }
@@ -113,41 +134,53 @@ public final class NexaSemanticChecker {
         if (expression instanceof Index index) {
             NexaType targetType = resolve(expr(index.target()));
             NexaType indexType = expr(index.index());
+
             if (targetType instanceof NexaType.Array array) {
                 require(NexaType.INT64, indexType, index.index(), "array index");
                 return resolve(array.element());
             }
+
             if (NexaType.same(targetType, NexaType.OBJECT)) return NexaType.OBJECT;
+
             bad("Indexing requires ARRAY or OBJECT", index.span());
             return NexaType.OBJECT;
         }
 
         if (expression instanceof Array array) {
             if (array.values().isEmpty()) return new NexaType.Array(NexaType.OBJECT);
+
             NexaType elementType = null;
             for (Expr element : array.values()) {
                 NexaType current = expr(element);
-                elementType = elementType == null ? current : common(elementType, current, element, elementType, current);
+                elementType = elementType == null
+                        ? current
+                        : common(elementType, current, element, elementType, current);
             }
+
             return new NexaType.Array(elementType == null ? NexaType.OBJECT : elementType);
         }
 
         if (expression instanceof ObjectLit objectLiteral) {
             Map<String, NexaType> fields = new LinkedHashMap<>();
-            for (var entry : objectLiteral.fields().entrySet()) fields.put(entry.getKey(), resolve(expr(entry.getValue())));
+            for (var entry : objectLiteral.fields().entrySet()) {
+                fields.put(entry.getKey(), resolve(expr(entry.getValue())));
+            }
             return new NexaType.ObjectType(fields);
         }
 
         if (expression instanceof Unary unary) {
             NexaType operandType = resolve(expr(unary.expr()));
+
             if (unary.op().equals("!")) {
                 require(NexaType.BOOLEAN, operandType, unary.expr(), "logical negation");
                 return NexaType.BOOLEAN;
             }
+
             if (!NexaType.numeric(operandType)) {
                 bad("Unary numeric operator requires numeric value", unary.span());
                 return NexaType.OBJECT;
             }
+
             return operandType;
         }
 
@@ -155,25 +188,40 @@ public final class NexaSemanticChecker {
             NexaType leftType = resolve(expr(binary.left()));
             NexaType rightType = resolve(expr(binary.right()));
             String operator = binary.op();
+
             if (operator.equals("&&") || operator.equals("||")) {
                 require(NexaType.BOOLEAN, leftType, binary.left(), "logical operand");
                 require(NexaType.BOOLEAN, rightType, binary.right(), "logical operand");
                 return NexaType.BOOLEAN;
             }
+
             if (Set.of("==", "!=", "<", "<=", ">", ">=").contains(operator)) {
-                if (!compatible(leftType, rightType)) bad("Incompatible comparison types", binary.span());
+                if (!compatible(leftType, rightType)) {
+                    bad("Incompatible comparison types", binary.span());
+                }
                 return NexaType.BOOLEAN;
             }
+
             if (!NexaType.numeric(leftType) || !NexaType.numeric(rightType)) {
                 bad("Arithmetic requires numeric operands", binary.span());
                 return NexaType.OBJECT;
             }
+
             return common(leftType, rightType, binary.span(), binary.left(), binary.right());
         }
 
         if (expression instanceof Call call) {
-            // Function names are resolved by the function/plugin registry, not as variables.
-            if (!(call.target() instanceof Var)) expr(call.target());
+            // Calls are intentionally split into two semantic classes:
+            //
+            // 1. A normal call whose target is a known value/expression.
+            // 2. A symbolic host capability such as mqtt.publish(...).
+            //
+            // The latter must NOT resolve `mqtt` as a source-language variable.
+            // The plugin/host registry owns that namespace and resolves it later.
+            if (!isDynamicHostCallTarget(call.target())) {
+                expr(call.target());
+            }
+
             for (Expr argument : call.args()) expr(argument);
             return NexaType.OBJECT;
         }
@@ -181,12 +229,37 @@ public final class NexaSemanticChecker {
         throw new IllegalStateException("Unknown expression: " + expression.getClass().getName());
     }
 
+    /**
+     * Returns true only for a dotted symbolic call whose root is not a source
+     * variable. This keeps normal typed calls strict while allowing unresolved
+     * plugin namespaces to cross the host capability boundary.
+     *
+     * Examples accepted dynamically:
+     *   mqtt.publish(...)
+     *   opcua.client.read(...)
+     *
+     * Examples still checked normally:
+     *   client.publish(...)    // if `client` is declared
+     *   input.client.publish(...) // `input` is a declared dynamic object
+     */
+    private boolean isDynamicHostCallTarget(Expr target) {
+        if (!(target instanceof Field)) return false;
+
+        Expr root = target;
+        while (root instanceof Field field) root = field.target();
+
+        if (!(root instanceof Var variable)) return false;
+        return lookupSymbol(variable.name()) == null;
+    }
+
     private void require(NexaType target, NexaType value, Expr source, String where) {
         target = resolve(target);
         value = resolve(value);
         if (NexaType.same(target, value)) return;
 
-        if (target instanceof NexaType.Array && source instanceof Array array && array.values().isEmpty()) return;
+        if (target instanceof NexaType.Array
+                && source instanceof Array array
+                && array.values().isEmpty()) return;
 
         if (target instanceof NexaType.Array targetArray && source instanceof Array array) {
             for (Expr element : array.values()) {
@@ -198,11 +271,14 @@ public final class NexaSemanticChecker {
         if (NexaType.same(value, NexaType.OBJECT) && target instanceof NexaType.ObjectType) return;
         if (NexaType.same(target, NexaType.OBJECT) && value instanceof NexaType.ObjectType) return;
 
-        if (target instanceof NexaType.ObjectType targetObject && value instanceof NexaType.ObjectType valueObject) {
+        if (target instanceof NexaType.ObjectType targetObject
+                && value instanceof NexaType.ObjectType valueObject) {
             if (!targetObject.fields().keySet().equals(valueObject.fields().keySet())) {
-                bad("Type mismatch in " + where + ": expected " + target.displayName() + ", got " + value.displayName(), source.span());
+                bad("Type mismatch in " + where + ": expected "
+                        + target.displayName() + ", got " + value.displayName(), source.span());
                 return;
             }
+
             for (String name : targetObject.fields().keySet()) {
                 require(targetObject.fields().get(name), valueObject.fields().get(name), source, where + "." + name);
             }
@@ -211,9 +287,13 @@ public final class NexaSemanticChecker {
 
         if (isConstantExpression(source) && constantFits(source, target)) return;
 
-        if (NexaType.numeric(target) && NexaType.numeric(value) && rank(value) <= rank(target) && unsignedConversionAllowed(value, target)) return;
+        if (NexaType.numeric(target)
+                && NexaType.numeric(value)
+                && rank(value) <= rank(target)
+                && unsignedConversionAllowed(value, target)) return;
 
-        bad("Type mismatch in " + where + ": expected " + target.displayName() + ", got " + value.displayName(), source.span());
+        bad("Type mismatch in " + where + ": expected "
+                + target.displayName() + ", got " + value.displayName(), source.span());
     }
 
     private boolean unsignedConversionAllowed(NexaType value, NexaType target) {
@@ -223,7 +303,8 @@ public final class NexaSemanticChecker {
     }
 
     private boolean compatible(NexaType a, NexaType b) {
-        a = resolve(a); b = resolve(b);
+        a = resolve(a);
+        b = resolve(b);
         if (NexaType.same(a, b)) return true;
         if (NexaType.numeric(a) && NexaType.numeric(b)) return true;
         return NexaType.same(a, NexaType.OBJECT) || NexaType.same(b, NexaType.OBJECT);
@@ -232,18 +313,23 @@ public final class NexaSemanticChecker {
     private boolean isConstantExpression(Expr expression) {
         if (expression instanceof Literal) return true;
         if (expression instanceof Unary unary) return isConstantExpression(unary.expr());
-        if (expression instanceof Binary binary) return isConstantExpression(binary.left()) && isConstantExpression(binary.right());
+        if (expression instanceof Binary binary) {
+            return isConstantExpression(binary.left()) && isConstantExpression(binary.right());
+        }
         return false;
     }
 
     private boolean constantFits(Expr expression, NexaType target) {
         target = resolve(target);
         if (!NexaType.numeric(target)) return false;
+
         Number value = constantNumber(expression);
         if (value == null) return false;
+
         double n = value.doubleValue();
         if (!Double.isFinite(n)) return false;
         if (requiresWholeNumber(target) && !isWhole(n)) return false;
+
         return switch (target.displayName()) {
             case "INT8" -> n >= -128 && n <= 127;
             case "INT16" -> n >= -32768 && n <= 32767;
@@ -260,39 +346,65 @@ public final class NexaSemanticChecker {
 
     private boolean requiresWholeNumber(NexaType type) {
         return switch (type.displayName()) {
-            case "INT8", "INT16", "INT32", "INT64", "UINT8", "UINT16", "UINT32", "UINT64" -> true;
+            case "INT8", "INT16", "INT32", "INT64",
+                    "UINT8", "UINT16", "UINT32", "UINT64" -> true;
             default -> false;
         };
     }
 
     private Number constantNumber(Expr expression) {
         if (expression instanceof Literal literal && literal.value() instanceof Number n) return n;
+
         if (expression instanceof Unary unary) {
             Number n = constantNumber(unary.expr());
             if (n == null) return null;
-            return switch (unary.op()) { case "+" -> n.doubleValue(); case "-" -> -n.doubleValue(); default -> null; };
+            return switch (unary.op()) {
+                case "+" -> n.doubleValue();
+                case "-" -> -n.doubleValue();
+                default -> null;
+            };
         }
+
         if (expression instanceof Binary binary) {
-            Number l = constantNumber(binary.left()), r = constantNumber(binary.right());
+            Number l = constantNumber(binary.left());
+            Number r = constantNumber(binary.right());
             if (l == null || r == null) return null;
-            double a = l.doubleValue(), b = r.doubleValue();
-            return switch (binary.op()) { case "+" -> a + b; case "-" -> a - b; case "*" -> a * b; case "/" -> b == 0 ? null : a / b; default -> null; };
+
+            double a = l.doubleValue();
+            double b = r.doubleValue();
+            return switch (binary.op()) {
+                case "+" -> a + b;
+                case "-" -> a - b;
+                case "*" -> a * b;
+                case "/" -> b == 0 ? null : a / b;
+                default -> null;
+            };
         }
+
         return null;
     }
 
     private boolean isWhole(double value) { return value == Math.rint(value); }
 
     private NexaType common(NexaType a, NexaType b, SourceSpan span, Expr leftExpr, Expr rightExpr) {
-        a = resolve(a); b = resolve(b);
+        a = resolve(a);
+        b = resolve(b);
         if (NexaType.same(a, b)) return a;
-        if (leftExpr instanceof Literal literal && !(rightExpr instanceof Literal) && literalFits(literal, b)) return b;
-        if (rightExpr instanceof Literal literal && !(leftExpr instanceof Literal) && literalFits(literal, a)) return a;
+
+        if (leftExpr instanceof Literal literal
+                && !(rightExpr instanceof Literal)
+                && literalFits(literal, b)) return b;
+
+        if (rightExpr instanceof Literal literal
+                && !(leftExpr instanceof Literal)
+                && literalFits(literal, a)) return a;
+
         if (NexaType.numeric(a) && NexaType.numeric(b)) {
             if (a.displayName().equals("FLOAT64") || b.displayName().equals("FLOAT64")) return NexaType.FLOAT64;
             if (a.displayName().equals("FLOAT32") || b.displayName().equals("FLOAT32")) return NexaType.FLOAT32;
             return rank(a) >= rank(b) ? a : b;
         }
+
         bad("No compatible types: " + a.displayName() + " and " + b.displayName(), span);
         return NexaType.OBJECT;
     }
@@ -304,48 +416,76 @@ public final class NexaSemanticChecker {
     private boolean literalFits(Literal literal, NexaType target) {
         target = resolve(target);
         if (!(literal.value() instanceof Number number) || !NexaType.numeric(target)) return false;
+
         double n = number.doubleValue();
         if (!Double.isFinite(n)) return false;
         if (requiresWholeNumber(target) && !isWhole(n)) return false;
+
         return switch (target.displayName()) {
-            case "INT8" -> n >= -128 && n <= 127; case "INT16" -> n >= -32768 && n <= 32767;
-            case "INT32" -> n >= Integer.MIN_VALUE && n <= Integer.MAX_VALUE; case "INT64" -> true;
-            case "UINT8" -> n >= 0 && n <= 255; case "UINT16" -> n >= 0 && n <= 65535;
-            case "UINT32" -> n >= 0 && n <= 4294967295d; case "UINT64" -> n >= 0;
-            case "FLOAT32", "FLOAT64" -> true; default -> false;
+            case "INT8" -> n >= -128 && n <= 127;
+            case "INT16" -> n >= -32768 && n <= 32767;
+            case "INT32" -> n >= Integer.MIN_VALUE && n <= Integer.MAX_VALUE;
+            case "INT64" -> true;
+            case "UINT8" -> n >= 0 && n <= 255;
+            case "UINT16" -> n >= 0 && n <= 65535;
+            case "UINT32" -> n >= 0 && n <= 4294967295d;
+            case "UINT64" -> n >= 0;
+            case "FLOAT32", "FLOAT64" -> true;
+            default -> false;
         };
     }
 
     private int rank(NexaType type) {
         return switch (type.displayName()) {
-            case "INT8", "UINT8" -> 1; case "INT16", "UINT16" -> 2; case "INT32", "UINT32" -> 3;
-            case "INT64", "UINT64" -> 4; case "FLOAT32" -> 5; case "FLOAT64" -> 6; default -> 0;
+            case "INT8", "UINT8" -> 1;
+            case "INT16", "UINT16" -> 2;
+            case "INT32", "UINT32" -> 3;
+            case "INT64", "UINT64" -> 4;
+            case "FLOAT32" -> 5;
+            case "FLOAT64" -> 6;
+            default -> 0;
         };
     }
 
     private NexaType resolve(NexaType type) {
         if (type instanceof NexaType.Named named) {
             NexaType resolved = types.get(named.name());
-            if (resolved == null) { bad("Unknown type: " + named.name(), new SourceSpan(0, 0)); return NexaType.OBJECT; }
+            if (resolved == null) {
+                bad("Unknown type: " + named.name(), new SourceSpan(0, 0));
+                return NexaType.OBJECT;
+            }
             return resolve(resolved);
         }
-        if (type instanceof NexaType.Array array) return new NexaType.Array(resolve(array.element()));
+
+        if (type instanceof NexaType.Array array) {
+            return new NexaType.Array(resolve(array.element()));
+        }
+
         if (type instanceof NexaType.ObjectType object) {
             Map<String, NexaType> fields = new LinkedHashMap<>();
             object.fields().forEach((name, fieldType) -> fields.put(name, resolve(fieldType)));
             return new NexaType.ObjectType(fields);
         }
+
         return type;
     }
 
-    private boolean lvalue(Expr expression) { return expression instanceof Var || expression instanceof Field || expression instanceof Index; }
+    private boolean lvalue(Expr expression) {
+        return expression instanceof Var || expression instanceof Field || expression instanceof Index;
+    }
 
-    private void define(String name, NexaType type, boolean constant) { scopes.peek().put(name, new Symbol(type, constant)); }
+    private void define(String name, NexaType type, boolean constant) {
+        scopes.peek().put(name, new Symbol(type, constant));
+    }
 
     private Symbol lookupSymbol(String name) {
-        for (Map<String, Symbol> scope : scopes) if (scope.containsKey(name)) return scope.get(name);
+        for (Map<String, Symbol> scope : scopes) {
+            if (scope.containsKey(name)) return scope.get(name);
+        }
         return null;
     }
 
-    private void bad(String message, SourceSpan span) { errors.add(new Diagnostic(message, span)); }
+    private void bad(String message, SourceSpan span) {
+        errors.add(new Diagnostic(message, span));
+    }
 }
