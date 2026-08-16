@@ -1,9 +1,9 @@
 package nexa.plugin.asset.script;
 
 import nexa.framework.runtime.domain.scripting.internal.nexa.NexaHostObject;
+import nexa.framework.runtime.domain.scripting.internal.nexa.NexaScriptException;
 import nexa.framework.runtime.domain.scripting.internal.nexa.NexaRuntime.NexaCallable;
 import nexa.framework.runtime.domain.scripting.internal.nexa.NexaRuntimeExtension;
-import nexa.framework.runtime.domain.scripting.internal.nexa.NexaScriptException;
 import nexa.plugin.asset.resource.AssetManagerResourcePlugin;
 
 import java.util.Map;
@@ -58,7 +58,11 @@ public final class AssetManagerScriptExtension implements NexaRuntimeExtension {
                         throw new NexaScriptException("Method write() memerlukan 2 argumen: path dan value.", callLine, callColumn);
                     }
                     String path = resolvePath(engine, String.valueOf(arguments.getFirst()));
-                    return manager.write(path, arguments.get(1));
+                    AssetScriptContext context = engine.currentContext();
+                    if (context != null && AssetManagerResourcePlugin.normalizePath(context.attributePath()).equals(path)) {
+                        throw new NexaScriptException("Calculation script tidak boleh menulis ke self attribute sendiri.", callLine, callColumn);
+                    }
+                    return manager.writeInternal(path, arguments.get(1), "GOOD") == null;
                 };
                 default -> throw new NexaScriptException("Member assetManager tidak dikenal: " + name, line, column);
             };
