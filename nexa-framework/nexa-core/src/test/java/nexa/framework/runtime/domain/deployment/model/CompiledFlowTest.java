@@ -7,6 +7,7 @@ import nexa.framework.runtime.domain.workspace.model.InputExecutionPolicyDefinit
 import nexa.framework.runtime.domain.workspace.model.NodeCategory;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -46,7 +47,8 @@ class CompiledFlowTest {
                 connections(
                         connection("c1", "script", "default", "debug-a"),
                         connection("c2", "script", "default", "debug-b")),
-                Map.of());
+                routes(
+                        route("script", "default", "debug-a", "debug-b")));
 
         assertEquals(List.of("debug-a", "debug-b"), flow.targets("script", "default"));
     }
@@ -58,7 +60,9 @@ class CompiledFlowTest {
                 connections(
                         connection("c1", "input-a", "default", "script"),
                         connection("c2", "input-b", "default", "script")),
-                Map.of());
+                routes(
+                        route("input-a", "default", "script"),
+                        route("input-b", "default", "script")));
 
         assertEquals(List.of("script"), flow.targets("input-a", "default"));
         assertEquals(List.of("script"), flow.targets("input-b", "default"));
@@ -72,7 +76,8 @@ class CompiledFlowTest {
         CompiledFlow flow = flow(
                 nodes("script", "debug-a", "debug-b"),
                 Map.of("c1", first, "c2", second),
-                Map.of());
+                routes(
+                        route("script", "default", "debug-a", "debug-b")));
 
         assertEquals(List.of("debug-a", "debug-b"), flow.targets("script", "default"));
 
@@ -97,7 +102,7 @@ class CompiledFlowTest {
     }
 
     private static Map<String, CompiledNode> nodes(String... ids) {
-        Map<String, CompiledNode> nodes = new java.util.LinkedHashMap<>();
+        Map<String, CompiledNode> nodes = new LinkedHashMap<>();
         for (String id : ids) {
             nodes.put(id, node(id, NodeCategory.EXECUTOR, null));
         }
@@ -120,12 +125,27 @@ class CompiledFlowTest {
     }
 
     private static Map<String, CompiledConnection> connections(CompiledConnection... connections) {
-        Map<String, CompiledConnection> result = new java.util.LinkedHashMap<>();
+        Map<String, CompiledConnection> result = new LinkedHashMap<>();
         for (CompiledConnection connection : connections) {
             result.put(connection.id(), connection);
         }
         return result;
     }
+
+    private static Map<String, Map<String, List<String>>> routes(Route... routes) {
+        Map<String, Map<String, List<String>>> result = new LinkedHashMap<>();
+        for (Route route : routes) {
+            result.computeIfAbsent(route.sourceNodeId(), ignored -> new LinkedHashMap<>())
+                    .put(route.sourcePort(), List.of(route.targets()));
+        }
+        return result;
+    }
+
+    private static Route route(String sourceNodeId, String sourcePort, String... targets) {
+        return new Route(sourceNodeId, sourcePort, targets);
+    }
+
+    private record Route(String sourceNodeId, String sourcePort, String[] targets) {}
 
     private static CompiledConnection connection(
             String id,
