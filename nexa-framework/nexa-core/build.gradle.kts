@@ -9,12 +9,10 @@ repositories {
 dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    
-
+    testImplementation(project(":nexa-compiler"))
 
     implementation(libs.jackson.databind)
     api(project(":nexa-api"))
-    testRuntimeOnly(project(":nexa-compiler"))
 }
 
 java {
