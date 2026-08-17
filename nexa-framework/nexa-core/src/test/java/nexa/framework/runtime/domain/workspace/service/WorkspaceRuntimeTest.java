@@ -64,7 +64,6 @@ class WorkspaceRuntimeTest {
         String writer = """
                 let value: INT32 = 42;
                 $shared = value;
-                send(msg);
                 """;
         String reader = """
                 msg.payload = $shared;
