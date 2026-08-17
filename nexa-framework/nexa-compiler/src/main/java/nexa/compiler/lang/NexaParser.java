@@ -121,8 +121,9 @@ public final class NexaParser {
         NexaToken t = next();
         return switch (t.kind()) {
             // Unsuffixed integer literals use INT32 as Nexa's default integer type.
-            // Explicitly wider values can still be represented by typed expressions.
-            case INT -> new Literal(Integer.valueOf(t.text()), NexaType.INT32, t.span());
+            // Store the lexical integer as long so literals wider than Java int can
+            // still reach the semantic range checker without changing their Nexa type.
+            case INT -> new Literal(Long.valueOf(t.text()), NexaType.INT32, t.span());
             case FLOAT -> new Literal(Double.parseDouble(t.text()), NexaType.FLOAT64, t.span());
             case STRING -> new Literal(t.text(), NexaType.STRING, t.span());
             case TRUE -> new Literal(true, NexaType.BOOLEAN, t.span()); case FALSE -> new Literal(false, NexaType.BOOLEAN, t.span());
