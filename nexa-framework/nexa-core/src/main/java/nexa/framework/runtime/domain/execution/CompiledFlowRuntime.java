@@ -4,6 +4,8 @@ import nexa.framework.runtime.api.NexaCompiledNode;
 import nexa.framework.runtime.api.NexaExecutionContext;
 import nexa.framework.runtime.api.model.RuntimeMessage;
 import nexa.framework.runtime.api.state.TypedTagStore;
+import nexa.framework.tags.TagRuntime;
+import nexa.framework.tags.TagQuality;
 import nexa.framework.runtime.domain.deployment.model.CompiledFlow;
 import nexa.framework.runtime.domain.deployment.model.CompiledNode;
 import nexa.framework.runtime.domain.workspace.model.NodeCategory;
@@ -18,14 +20,24 @@ import java.util.function.Consumer;
 /** Minimal synchronous flow execution runtime. */
 public final class CompiledFlowRuntime {
     private final CompiledFlow flow;
-    private final TypedTagStore tagStore;
+    private final TypedTagStore legacyTagStore;
+    private final TagRuntime tagRuntime;
     private final Map<String, Consumer<RuntimeMessage>> outputHandlers = new ConcurrentHashMap<>();
 
-    public CompiledFlowRuntime(CompiledFlow flow) { this(flow, null); }
+    public CompiledFlowRuntime(CompiledFlow flow) { this(flow, (TypedTagStore) null); }
 
+    /** Compatibility constructor for the pre-neXa-tags runtime. */
     public CompiledFlowRuntime(CompiledFlow flow, TypedTagStore tagStore) {
         this.flow = Objects.requireNonNull(flow, "flow must not be null");
-        this.tagStore = tagStore;
+        this.legacyTagStore = tagStore;
+        this.tagRuntime = null;
+    }
+
+    /** Preferred constructor: flow execution reads/writes the standalone high-speed tag runtime. */
+    public CompiledFlowRuntime(CompiledFlow flow, TagRuntime tagRuntime) {
+        this.flow = Objects.requireNonNull(flow, "flow must not be null");
+        this.legacyTagStore = null;
+        this.tagRuntime = tagRuntime;
     }
 
     public CompiledFlow flow() { return flow; }
@@ -92,15 +104,45 @@ public final class CompiledFlowRuntime {
         @Override public long readTagLong(int slot) { return tags().readLong(slot); }
         @Override public double readTagDouble(int slot) { return tags().readDouble(slot); }
         @Override public Object readTagObject(int slot) { return tags().readObject(slot); }
-        @Override public void writeTagInt(int slot, int value) { tags().writeInt(slot, value); }
-        @Override public void writeTagLong(int slot, long value) { tags().writeLong(slot, value); }
-        @Override public void writeTagDouble(int slot, double value) { tags().writeDouble(slot, value); }
-        @Override public void writeTagObject(int slot, Object value) { tags().writeObject(slot, value); }
+        @Override public void writeTagInt(int slot, int value) { write(slot, value); }
+        @Override public void writeTagLong(int slot, long value) { write(slot, value); }
+        @Override public void writeTagDouble(int slot, double value) { write(slot, value); }
+        @Override public void writeTagObject(int slot, Object value) { write(slot, value); }
 
-        private TypedTagStore tags() {
-            if (tagStore == null) throw new UnsupportedOperationException("TagStore is not wired into this flow runtime");
-            return tagStore;
+        private int readInt(int slot) {
+            if (tagRuntime != null) return tagRuntime.readInt(slot);
+            return legacyTagStore.readInt(slot);
         }
+        private long readLong(int slot) {
+            if (tagRuntime != null) return tagRuntime.readLong(slot);
+            return legacyTagStore.readLong(slot);
+        }
+        private double readDouble(int slot) {
+            if (tagRuntime != null) return tagRuntime.readDouble(slot);
+            return legacyTagStore.readDouble(slot);
+        }
+        private Object readObject(int slot) {
+            if (tagRuntime != null) return tagRuntime.readSlot(slot);
+            return legacyTagStore.readObject(slot);
+        }
+        private void write(int slot, Object value) {
+            if (tagRuntime != null) {
+                tagRuntime.writeSlot(slot, value, TagQuality.GOOD);
+                return;
+            }
+            if (value instanceof Integer i) legacyTagStore.writeInt(slot, i);
+            else if (value instanceof Long l) legacyTagStore.writeLong(slot, l);
+            else if (value instanceof Double d) legacyTagStore.writeDouble(slot, d);
+            else legacyTagStore.writeObject(slot, value);
+        }
+        private TagAccess tags() { return new TagAccess(); }
+    }
+
+    private final class TagAccess {
+        int readInt(int slot) { return tagRuntime != null ? tagRuntime.readInt(slot) : legacyTagStore.readInt(slot); }
+        long readLong(int slot) { return tagRuntime != null ? tagRuntime.readLong(slot) : legacyTagStore.readLong(slot); }
+        double readDouble(int slot) { return tagRuntime != null ? tagRuntime.readDouble(slot) : legacyTagStore.readDouble(slot); }
+        Object readObject(int slot) { return tagRuntime != null ? tagRuntime.readSlot(slot) : legacyTagStore.readObject(slot); }
     }
 
     private CompiledNode requireNode(String nodeId) {
