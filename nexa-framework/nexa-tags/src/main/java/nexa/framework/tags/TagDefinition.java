@@ -11,9 +11,24 @@ public record TagDefinition(
         TagCalculationDefinition calculationConfig
 ) {
     @JsonCreator
-    public TagDefinition(@JsonProperty("name") String name,@JsonProperty("dataType") TagDataType dataType,@JsonProperty("value") Object value,@JsonProperty("highSpeed") Boolean highSpeed,@JsonProperty("calculationConfig") TagCalculationDefinition calculationConfig){
-        this.name=name;this.dataType=dataType==null?TagDataType.OBJECT:dataType;this.value=value;this.highSpeed=highSpeed!=null&&highSpeed;this.calculationConfig=calculationConfig;
+    public TagDefinition(
+            @JsonProperty("name") String name,
+            @JsonProperty("dataType") TagDataType dataType,
+            @JsonProperty("value") Object value,
+            @JsonProperty("highSpeed") boolean highSpeed,
+            @JsonProperty("calculationConfig") TagCalculationDefinition calculationConfig) {
+        this.name = name;
+        this.dataType = dataType == null ? TagDataType.OBJECT : dataType;
+        this.value = value;
+        this.highSpeed = highSpeed;
+        this.calculationConfig = calculationConfig;
     }
-    public TagDefinition(String name,TagDataType dataType,Object value){this(name,dataType,value,false,null);}
-    public TagDefinition(String name,TagDataType dataType,Object value,boolean highSpeed){this(name,dataType,value,highSpeed,null);}
+
+    public TagDefinition(String name, TagDataType dataType, Object value) {
+        this(name, dataType, value, false, null);
+    }
+
+    public TagDefinition(String name, TagDataType dataType, Object value, boolean highSpeed) {
+        this(name, dataType, value, highSpeed, null);
+    }
 }
