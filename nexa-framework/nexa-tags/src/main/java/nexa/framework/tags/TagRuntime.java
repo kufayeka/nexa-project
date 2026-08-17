@@ -28,34 +28,19 @@ public final class TagRuntime implements AutoCloseable {
     public Object readSlot(int slot) { return store.readSlot(slot); }
 
     public void write(String path, Object value) { write(path, value, TagQuality.GOOD); }
-
     public void write(String path, Object value, TagQuality quality) {
-        TagValue event = store.write(path, value, quality);
-        if (event != null) dispatch(event);
+        store.write(path, value, quality);
     }
-
     public void writeInt(int slot, int value) { writeSlot(slot, value, TagQuality.GOOD); }
     public void writeLong(int slot, long value) { writeSlot(slot, value, TagQuality.GOOD); }
     public void writeDouble(int slot, double value) { writeSlot(slot, value, TagQuality.GOOD); }
     public void writeObject(int slot, Object value) { writeSlot(slot, value, TagQuality.GOOD); }
+    public void writeSlot(int slot, Object value, TagQuality quality) { store.writeSlot(slot, value, quality, true); }
 
-    public void writeSlot(int slot, Object value, TagQuality quality) {
-        TagValue event = store.writeSlot(slot, value, quality, true);
-        if (event != null) dispatch(event);
-    }
-
-    private void dispatch(TagValue event) {
-        // Listener dispatch is deliberately detached from the write/read hot path.
-        eventExecutor.execute(() -> {
-            // The store owns listener ordering; this hook exists so workspace/flow
-            // integration can subscribe without blocking tag writes.
-        });
-    }
-
+    /** Listener callbacks are queued off the tag write path. */
     public void onWrite(Consumer<TagValue> listener) {
         store.onWrite(event -> eventExecutor.execute(() -> listener.accept(event)));
     }
-
     public void onChange(Consumer<TagValue> listener) {
         store.onChange(event -> eventExecutor.execute(() -> listener.accept(event)));
     }
