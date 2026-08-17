@@ -1,7 +1,6 @@
 package nexa.framework.runtime.domain.execution;
 
 import nexa.framework.runtime.api.NexaCompiledNode;
-import nexa.framework.runtime.api.NexaExecutionContext;
 import nexa.framework.runtime.api.model.RuntimeMessage;
 import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
 import nexa.framework.runtime.domain.deployment.model.CompiledFlow;
@@ -39,10 +38,6 @@ class CompiledFlowRuntimeTest {
                 connections(
                         connection("c1", "input", "default", "script"),
                         connection("c2", "script", "default", "debug")
-                ),
-                routes(
-                        route("input", "default", List.of("script")),
-                        route("script", "default", List.of("debug"))
                 )
         );
 
@@ -71,10 +66,6 @@ class CompiledFlowRuntimeTest {
                         connection("c1", "input", "default", "script"),
                         connection("c2", "script", "default", "debug-a"),
                         connection("c3", "script", "default", "debug-b")
-                ),
-                routes(
-                        route("input", "default", List.of("script")),
-                        route("script", "default", List.of("debug-a", "debug-b"))
                 )
         );
 
@@ -90,10 +81,7 @@ class CompiledFlowRuntimeTest {
 
     @Test
     void multipleInputsShouldFanInIntoOneExecutor() {
-        NexaCompiledNode script = (msg, context) -> {
-            msg.writeValue("seen", true);
-            context.send(msg);
-        };
+        NexaCompiledNode script = (msg, context) -> context.send(msg);
 
         CompiledFlow flow = flow(
                 nodes(
@@ -106,11 +94,6 @@ class CompiledFlowRuntimeTest {
                         connection("c1", "manual-a", "default", "script"),
                         connection("c2", "manual-b", "default", "script"),
                         connection("c3", "script", "default", "debug")
-                ),
-                routes(
-                        route("manual-a", "default", List.of("script")),
-                        route("manual-b", "default", List.of("script")),
-                        route("script", "default", List.of("debug"))
                 )
         );
 
@@ -153,22 +136,9 @@ class CompiledFlowRuntimeTest {
         return result;
     }
 
-    private static Map<String, Map<String, List<String>>> routes(Object... values) {
-        Map<String, Map<String, List<String>>> result = new LinkedHashMap<>();
-        for (int i = 0; i < values.length; i += 2) {
-            result.put((String) values[i], Map.of((String) values[i + 1], List.of()));
-        }
-        return result;
-    }
-
-    private static Object[] route(String nodeId, String port, List<String> targets) {
-        return new Object[]{nodeId, port, targets};
-    }
-
     private static CompiledFlow flow(
             Map<String, CompiledNode> nodes,
-            Map<String, CompiledConnection> connections,
-            Map<String, Map<String, List<String>>> ignoredRoutes) {
+            Map<String, CompiledConnection> connections) {
         Map<String, Map<String, List<String>>> routes = new LinkedHashMap<>();
         for (CompiledConnection connection : connections.values()) {
             routes.computeIfAbsent(connection.sourceNodeId(), ignored -> new LinkedHashMap<>())
