@@ -1,0 +1,33 @@
+name: Nexa Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      - name: Run compiler tests
+        run: ./gradlew :nexa-compiler:test --no-daemon
+
+      - name: Run all tests
+        run: ./gradlew test --no-daemon
