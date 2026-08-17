@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public final class CompiledFlow {
 
@@ -79,9 +78,12 @@ public final class CompiledFlow {
         if (node == null) {
             throw new ValidationException("Unknown node id " + nodeId + " in flow " + flowId);
         }
+        // Preserve the AOT executable when changing runtime enablement.
+        // Losing this reference silently converts a compiled executor into a
+        // pass-through node after the first control-plane toggle.
         nodeById.put(nodeId, new CompiledNode(
                 node.id(), node.category(), node.type(), enabled,
-                node.inputPolicy(), node.config(), node.language()));
+                node.inputPolicy(), node.config(), node.language(), node.executableNode()));
     }
 
     public synchronized void setConnectionEnabled(String connectionId, boolean enabled) {
