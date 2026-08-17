@@ -13,6 +13,7 @@ dependencies {
 
     implementation(libs.jackson.databind)
     api(project(":nexa-api"))
+    implementation(project(":nexa-tags"))
 }
 
 java {
