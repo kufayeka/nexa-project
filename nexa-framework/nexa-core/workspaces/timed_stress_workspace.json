@@ -26,10 +26,10 @@
         "maxConcurrentExecutions" : 1024
       },
       "config" : {
+        "interval" : "50ms",
         "payload" : {
           "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
-        },
-        "interval" : "50ms"
+        }
       }
     }, {
       "id" : "exec-router-0",
@@ -125,10 +125,10 @@
         "maxConcurrentExecutions" : 1024
       },
       "config" : {
+        "interval" : "50ms",
         "payload" : {
           "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
-        },
-        "interval" : "50ms"
+        }
       }
     }, {
       "id" : "exec-router-1",
@@ -224,10 +224,10 @@
         "maxConcurrentExecutions" : 1024
       },
       "config" : {
+        "interval" : "50ms",
         "payload" : {
           "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
-        },
-        "interval" : "50ms"
+        }
       }
     }, {
       "id" : "exec-router-2",
@@ -323,10 +323,10 @@
         "maxConcurrentExecutions" : 1024
       },
       "config" : {
+        "interval" : "50ms",
         "payload" : {
           "rawData" : "{\"speed\":150,\"temp\":105.2,\"batches\":[5,15,25,35],\"name\":\"  WO-9988-B  \"}"
-        },
-        "interval" : "50ms"
+        }
       }
     }, {
       "id" : "exec-router-3",
@@ -414,165 +414,245 @@
       }
     } ],
     "connections" : [ {
+      "id" : "38f5c3c6-8df6-45b7-8daf-bde758fbc68d",
       "sourceNodeId" : "input-timed-0",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-router-0"
+      "targetNodeId" : "exec-router-0",
+      "enabled" : true
     }, {
+      "id" : "36746707-8492-4c2a-9a03-015075f44876",
       "sourceNodeId" : "exec-router-0",
       "sourcePort" : "p0",
-      "targetNodeId" : "exec-complex-0-0"
+      "targetNodeId" : "exec-complex-0-0",
+      "enabled" : true
     }, {
+      "id" : "4095b534-1861-42b9-9231-ca4a142178bf",
       "sourceNodeId" : "exec-complex-0-0",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-0-0"
+      "targetNodeId" : "exec-second-0-0",
+      "enabled" : true
     }, {
+      "id" : "11dd15c0-d7da-4af1-8345-1243835e3dff",
       "sourceNodeId" : "exec-second-0-0",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "6d32c373-6ed4-49e7-a44b-78bc94c524c6",
       "sourceNodeId" : "exec-router-0",
       "sourcePort" : "p1",
-      "targetNodeId" : "exec-complex-0-1"
+      "targetNodeId" : "exec-complex-0-1",
+      "enabled" : true
     }, {
+      "id" : "7a820715-cd3e-40dc-ab57-2673c4f46f14",
       "sourceNodeId" : "exec-complex-0-1",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-0-1"
+      "targetNodeId" : "exec-second-0-1",
+      "enabled" : true
     }, {
+      "id" : "86b0f212-fd9c-4511-a5fc-d3a1e00508ec",
       "sourceNodeId" : "exec-second-0-1",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "53ccf781-b5b1-4697-8c97-fdc47b89169c",
       "sourceNodeId" : "exec-router-0",
       "sourcePort" : "p2",
-      "targetNodeId" : "exec-complex-0-2"
+      "targetNodeId" : "exec-complex-0-2",
+      "enabled" : true
     }, {
+      "id" : "696182fd-e96a-4c02-b0d4-8be08f66a1d6",
       "sourceNodeId" : "exec-complex-0-2",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-0-2"
+      "targetNodeId" : "exec-second-0-2",
+      "enabled" : true
     }, {
+      "id" : "2b47d99b-c094-4e23-a0d5-1e1d15214b4f",
       "sourceNodeId" : "exec-second-0-2",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "bb81421c-fd86-4900-a780-69edf41b9091",
       "sourceNodeId" : "input-timed-1",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-router-1"
+      "targetNodeId" : "exec-router-1",
+      "enabled" : true
     }, {
+      "id" : "5d7fece3-1903-4d8f-adac-54a7e0967c71",
       "sourceNodeId" : "exec-router-1",
       "sourcePort" : "p0",
-      "targetNodeId" : "exec-complex-1-0"
+      "targetNodeId" : "exec-complex-1-0",
+      "enabled" : true
     }, {
+      "id" : "062f0553-8385-4726-bdda-1e2d0732e7dc",
       "sourceNodeId" : "exec-complex-1-0",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-1-0"
+      "targetNodeId" : "exec-second-1-0",
+      "enabled" : true
     }, {
+      "id" : "f626a20f-e231-4b7c-9eff-3366695303e0",
       "sourceNodeId" : "exec-second-1-0",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "aefe4a8a-a3b5-4bbf-b948-ec2d0f74fe34",
       "sourceNodeId" : "exec-router-1",
       "sourcePort" : "p1",
-      "targetNodeId" : "exec-complex-1-1"
+      "targetNodeId" : "exec-complex-1-1",
+      "enabled" : true
     }, {
+      "id" : "d69fef09-fbe9-42b1-8e4e-052c7eec063f",
       "sourceNodeId" : "exec-complex-1-1",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-1-1"
+      "targetNodeId" : "exec-second-1-1",
+      "enabled" : true
     }, {
+      "id" : "06c912d2-5389-4311-b804-1128d3f63be5",
       "sourceNodeId" : "exec-second-1-1",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "1ea8ca57-71c9-4b8b-89b9-2d4785e7efb0",
       "sourceNodeId" : "exec-router-1",
       "sourcePort" : "p2",
-      "targetNodeId" : "exec-complex-1-2"
+      "targetNodeId" : "exec-complex-1-2",
+      "enabled" : true
     }, {
+      "id" : "932b07cf-d8aa-4604-8a3d-4a2417bed575",
       "sourceNodeId" : "exec-complex-1-2",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-1-2"
+      "targetNodeId" : "exec-second-1-2",
+      "enabled" : true
     }, {
+      "id" : "f2d3a73c-92ab-44d9-879c-044bd112aa00",
       "sourceNodeId" : "exec-second-1-2",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "4828b18c-939b-4c1e-bd9a-8167dddb0a8a",
       "sourceNodeId" : "input-timed-2",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-router-2"
+      "targetNodeId" : "exec-router-2",
+      "enabled" : true
     }, {
+      "id" : "351f4bea-bb44-4656-94a9-53558e0f38b0",
       "sourceNodeId" : "exec-router-2",
       "sourcePort" : "p0",
-      "targetNodeId" : "exec-complex-2-0"
+      "targetNodeId" : "exec-complex-2-0",
+      "enabled" : true
     }, {
+      "id" : "e8ec2749-f9d4-4bca-895e-b967d251f5b5",
       "sourceNodeId" : "exec-complex-2-0",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-2-0"
+      "targetNodeId" : "exec-second-2-0",
+      "enabled" : true
     }, {
+      "id" : "afe7e83a-ac53-4865-9839-5c709656ac30",
       "sourceNodeId" : "exec-second-2-0",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "30fbdf66-263c-4d6a-82e2-2895b7f0a938",
       "sourceNodeId" : "exec-router-2",
       "sourcePort" : "p1",
-      "targetNodeId" : "exec-complex-2-1"
+      "targetNodeId" : "exec-complex-2-1",
+      "enabled" : true
     }, {
+      "id" : "94c15724-1541-488c-b989-df204906287f",
       "sourceNodeId" : "exec-complex-2-1",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-2-1"
+      "targetNodeId" : "exec-second-2-1",
+      "enabled" : true
     }, {
+      "id" : "32289a28-bc10-4d5e-9569-49c56c2a3b07",
       "sourceNodeId" : "exec-second-2-1",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "47a0e419-cb06-4128-9230-778e97da83bc",
       "sourceNodeId" : "exec-router-2",
       "sourcePort" : "p2",
-      "targetNodeId" : "exec-complex-2-2"
+      "targetNodeId" : "exec-complex-2-2",
+      "enabled" : true
     }, {
+      "id" : "b7072a3e-1d69-424d-a923-42317527da03",
       "sourceNodeId" : "exec-complex-2-2",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-2-2"
+      "targetNodeId" : "exec-second-2-2",
+      "enabled" : true
     }, {
+      "id" : "aabd18ab-2ee7-4841-b5f3-0afa771fb787",
       "sourceNodeId" : "exec-second-2-2",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "89d0c86c-f838-40d8-89d1-573075dd6ad0",
       "sourceNodeId" : "input-timed-3",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-router-3"
+      "targetNodeId" : "exec-router-3",
+      "enabled" : true
     }, {
+      "id" : "66bcb29e-dbd9-4ac0-b51d-1045ace787e5",
       "sourceNodeId" : "exec-router-3",
       "sourcePort" : "p0",
-      "targetNodeId" : "exec-complex-3-0"
+      "targetNodeId" : "exec-complex-3-0",
+      "enabled" : true
     }, {
+      "id" : "c9551a25-05f5-4420-bb45-fa7649990e36",
       "sourceNodeId" : "exec-complex-3-0",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-3-0"
+      "targetNodeId" : "exec-second-3-0",
+      "enabled" : true
     }, {
+      "id" : "6df793f0-b74f-4e95-b85d-d38d50c19e7b",
       "sourceNodeId" : "exec-second-3-0",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "dc32653e-36f8-4937-b2ad-372cbb81b07f",
       "sourceNodeId" : "exec-router-3",
       "sourcePort" : "p1",
-      "targetNodeId" : "exec-complex-3-1"
+      "targetNodeId" : "exec-complex-3-1",
+      "enabled" : true
     }, {
+      "id" : "03fc079d-5901-4639-b5b2-bc9d9c88ac3d",
       "sourceNodeId" : "exec-complex-3-1",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-3-1"
+      "targetNodeId" : "exec-second-3-1",
+      "enabled" : true
     }, {
+      "id" : "55aefd6a-cf04-4faa-b184-0cfd3483d5b7",
       "sourceNodeId" : "exec-second-3-1",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     }, {
+      "id" : "c1008d40-bab3-4d79-bd41-35af6fff9e96",
       "sourceNodeId" : "exec-router-3",
       "sourcePort" : "p2",
-      "targetNodeId" : "exec-complex-3-2"
+      "targetNodeId" : "exec-complex-3-2",
+      "enabled" : true
     }, {
+      "id" : "0824ca07-228f-4f45-b526-871322c2e434",
       "sourceNodeId" : "exec-complex-3-2",
       "sourcePort" : "default",
-      "targetNodeId" : "exec-second-3-2"
+      "targetNodeId" : "exec-second-3-2",
+      "enabled" : true
     }, {
+      "id" : "94ef0a70-4960-417d-8097-927d9d7aef79",
       "sourceNodeId" : "exec-second-3-2",
       "sourcePort" : "default",
-      "targetNodeId" : "out-debug"
+      "targetNodeId" : "out-debug",
+      "enabled" : true
     } ]
   } ]
 }

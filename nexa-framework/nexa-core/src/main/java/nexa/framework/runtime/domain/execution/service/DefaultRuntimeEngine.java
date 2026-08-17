@@ -4,17 +4,9 @@ import nexa.framework.runtime.api.OutputConsumer;
 import nexa.framework.runtime.api.RuntimeConfiguration;
 import nexa.framework.runtime.api.RuntimeEngine;
 import nexa.framework.runtime.api.model.RuntimeMessage;
-import nexa.framework.runtime.api.plugin.NexaPlugin;
-import nexa.framework.runtime.api.plugin.NexaPluginContext;
-import nexa.framework.runtime.api.plugin.NexaResourcePlugin;
-import nexa.framework.runtime.api.plugin.NexaSourcePlugin;
 import nexa.framework.runtime.domain.workspace.WorkspaceModule;
 import nexa.framework.runtime.domain.workspace.model.WorkspaceDefinition;
-import nexa.framework.runtime.domain.workspace.model.ResourceDefinition;
 import nexa.framework.runtime.domain.workspace.model.FlowDefinition;
-import nexa.framework.runtime.domain.workspace.model.NodeDefinition;
-import nexa.framework.runtime.domain.scripting.ScriptingModule;
-import nexa.framework.runtime.domain.scripting.registry.PluginRegistry;
 import nexa.framework.runtime.domain.deployment.DeploymentModule;
 import nexa.framework.runtime.domain.deployment.model.CompiledWorkspace;
 import nexa.framework.runtime.domain.deployment.model.CompiledConnection;
@@ -42,16 +34,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class DefaultRuntimeEngine implements RuntimeEngine {
     private final WorkspaceModule workspaceModule;
-    private final ScriptingModule scriptingModule;
     private final DeploymentModule deploymentModule;
     private final ExecutionModule executionModule;
     private final SchedulerModule schedulerModule;
     private final StatisticsModule statisticsModule;
     private final ExecutionService executionService;
-    private final GlobalResourceRegistry globalResourceRegistry = new GlobalResourceRegistry();
-    private final ConcurrentHashMap<String, List<String>> workspaceResourceIds = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, List<String>> workspaceNodeIds = new ConcurrentHashMap<>();
-    private final NexaPluginContext pluginContext;
     private final DefaultNexaEventBus eventBus;
     private final DefaultNodeController nodeController;
     private final DefaultWorkspaceController workspaceController;
@@ -70,26 +57,13 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
         this.controlContext = new DefaultNexaControlContext(workspaceController, nodeController, connectionController,
                 runtimeController, eventBus);
         this.workspaceModule = new WorkspaceModule();
-        this.scriptingModule = new ScriptingModule();
         this.statisticsModule = new StatisticsModule();
-        this.deploymentModule = new DeploymentModule(scriptingModule.scriptEngineRegistry());
+        this.deploymentModule = new DeploymentModule();
         this.executionModule = new ExecutionModule(configuration, outputConsumer, nodeController, connectionController,
                 eventBus);
         this.executionService = executionModule.executionService();
         this.schedulerModule = new SchedulerModule(executionService, executionModule.executionEngine().scheduler());
         this.executionModule.executionEngine().setInputActivator(schedulerModule.inputActivator());
-        this.pluginContext = new NexaPluginContext() {
-            @Override
-            public Object getSharedResource(String resourceId) {
-                NexaResourcePlugin resource = globalResourceRegistry.getResource(resourceId);
-                return resource != null ? resource.getNativeClient() : null;
-            }
-
-            @Override
-            public boolean validateScript(String language, String script, Map<String, Object> errorContainer) {
-                return DefaultRuntimeEngine.this.validateScript(language, script, errorContainer);
-            }
-        };
     }
 
     @Override
@@ -104,148 +78,28 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
                 e.printStackTrace();
             }
         }
-        workspaceResourceIds.values().forEach(resIds -> {
-            for (String resId : resIds) {
-                NexaResourcePlugin resource = globalResourceRegistry.getResource(resId);
-                if (resource != null)
-                    try {
-                        resource.onStart();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-            }
-        });
-        workspaceNodeIds.values().forEach(nodeIds -> {
-            for (String nodeId : nodeIds) {
-                NexaPlugin instance = PluginRegistry.getInstance(nodeId);
-                if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
-                    try {
-                        lifecycle.onStart();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
         executionService.startRuntime();
     }
 
     @Override
     public void stopRuntime() {
-
         System.out.println("[RUNTIME] Shutting down...");
-
-        // =========================================================
-        // 1. DISABLE SEMUA WORKSPACE / FLOW
-        // =========================================================
-
         for (WorkspaceRuntime workspace : executionModule.workspaces().values()) {
             try {
                 if (workspace.enabled()) {
-                    System.out.println(
-                            "[RUNTIME] Disabling workspace: "
-                                    + workspace.workspaceId());
-
+                    System.out.println("[RUNTIME] Disabling workspace: " + workspace.workspaceId());
                     executionService.disable(workspace.workspaceId());
                 }
             } catch (Exception e) {
-                System.err.println(
-                        "[RUNTIME] Failed to disable workspace: "
-                                + workspace.workspaceId());
                 e.printStackTrace();
             }
         }
-
-        // =========================================================
-        // 2. STOP NODE PLUGINS
-        // =========================================================
-
-        workspaceNodeIds.values().forEach(nodeIds -> {
-
-            for (String nodeId : nodeIds) {
-
-                NexaPlugin instance = PluginRegistry.getInstance(nodeId);
-
-                if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
-
-                    try {
-                        System.out.println(
-                                "[PLUGIN] Stopping node: " + nodeId);
-
-                        lifecycle.onStop();
-
-                    } catch (Exception e) {
-
-                        System.err.println(
-                                "[PLUGIN] Failed to stop node: " + nodeId);
-
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
-
-        // =========================================================
-        // 3. STOP RESOURCE PLUGINS
-        // =========================================================
-
-        workspaceResourceIds.values().forEach(resourceIds -> {
-
-            for (String resourceId : resourceIds) {
-
-                NexaResourcePlugin resource = globalResourceRegistry.getResource(resourceId);
-
-                if (resource instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
-
-                    try {
-                        System.out.println(
-                                "[RESOURCE] Stopping resource: "
-                                        + resourceId);
-
-                        lifecycle.onStop();
-
-                    } catch (Exception e) {
-
-                        System.err.println(
-                                "[RESOURCE] Failed to stop resource: "
-                                        + resourceId);
-
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
-
-        // =========================================================
-        // 4. STOP EXECUTION ENGINE
-        // =========================================================
-
         try {
             executionService.stopRuntime();
         } catch (Exception e) {
             System.err.println("[RUNTIME] Failed to stop execution engine");
             e.printStackTrace();
         }
-
-        // =========================================================
-        // 5. REMOVE PLUGIN INSTANCES
-        // =========================================================
-
-        workspaceNodeIds.values().forEach(nodeIds -> {
-
-            for (String nodeId : nodeIds) {
-                PluginRegistry.removeInstance(nodeId);
-            }
-        });
-
-        // =========================================================
-        // 6. CLEAR RESOURCES
-        // =========================================================
-
-        globalResourceRegistry.clearAll();
-        workspaceResourceIds.clear();
-        workspaceNodeIds.clear();
-
         System.out.println("[RUNTIME] Runtime stopped cleanly.");
     }
 
@@ -255,11 +109,6 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
     public DefaultNodeController getNodeController() {
         return nodeController;
-    }
-
-    public boolean validateScript(String language, String script, Map<String, Object> errorContainer) {
-        var engine = scriptingModule.scriptEngineRegistry().find(language);
-        return engine != null && engine.compiler() != null && engine.compiler().validate(script, errorContainer);
     }
 
     public void injectMessage(String workspaceId, String flowId, String sourceNodeId, RuntimeMessage message) {
@@ -278,82 +127,8 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
 
     @Override
     public void deploy(WorkspaceDefinition workspaceDefinition) {
-        String workspaceId = workspaceDefinition.id();
-        undeployPlugins(workspaceId);
         CompiledWorkspace compiled = deploymentModule.deploymentService().compile(workspaceDefinition);
         executionService.deploy(compiled);
-
-        List<String> resIds = new ArrayList<>();
-        if (workspaceDefinition.resources() != null) {
-            for (ResourceDefinition resDef : workspaceDefinition.resources()) {
-                // A disabled resource is not initialized, registered, or started.
-                if (!resDef.enabled())
-                    continue;
-                if (!PluginRegistry.hasPlugin(resDef.type()))
-                    continue;
-                try {
-                    Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(resDef.type());
-                    NexaPlugin instance = clazz.getDeclaredConstructor().newInstance();
-                    if (instance instanceof NexaResourcePlugin resourcePlugin) {
-                        resourcePlugin.onInit(resDef.id(), resDef.config(), pluginContext);
-                        globalResourceRegistry.registerResource(resDef.id(), resourcePlugin);
-                        resIds.add(resDef.id());
-                    }
-                } catch (Exception e) {
-                    throw new RuntimeException("Gagal menginisialisasi resource plugin: " + resDef.id(), e);
-                }
-            }
-        }
-        if (!resIds.isEmpty())
-            workspaceResourceIds.put(workspaceId, resIds);
-
-        List<String> nodeIds = new ArrayList<>();
-        if (workspaceDefinition.flows() != null) {
-            for (FlowDefinition flow : workspaceDefinition.flows()) {
-                String flowId = flow.id();
-                if (flow.nodes() == null)
-                    continue;
-                for (NodeDefinition node : flow.nodes()) {
-                    if (!PluginRegistry.hasPlugin(node.type()))
-                        continue;
-                    try {
-                        Class<? extends NexaPlugin> clazz = PluginRegistry.getMeta(node.type());
-                        NexaPlugin instance = clazz.getDeclaredConstructor().newInstance();
-                        if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle)
-                            lifecycle.onInit(node.id(), node.config(), pluginContext);
-                        if (instance instanceof NexaSourcePlugin sourcePlugin) {
-                            String nodeId = node.id();
-                            sourcePlugin.setEmitter(msg -> trigger(workspaceId, flowId, nodeId, msg));
-                        }
-                        PluginRegistry.registerInstance(node.id(), instance);
-                        nodeIds.add(node.id());
-                    } catch (Exception e) {
-                        throw new RuntimeException("Gagal menginisialisasi node plugin: " + node.id(), e);
-                    }
-                }
-            }
-        }
-        if (!nodeIds.isEmpty())
-            workspaceNodeIds.put(workspaceId, nodeIds);
-        for (String resId : resIds) {
-            NexaResourcePlugin resource = globalResourceRegistry.getResource(resId);
-            if (resource != null)
-                try {
-                    resource.onStart();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-        }
-        for (String nodeId : nodeIds) {
-            NexaPlugin instance = PluginRegistry.getInstance(nodeId);
-            if (instance instanceof nexa.framework.runtime.api.plugin.NexaPluginLifecycle lifecycle) {
-                try {
-                    lifecycle.onStart();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }
     }
 
     @Override
@@ -361,18 +136,6 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
         executionService.disable(workspaceId);
         executionService.undeploy(workspaceId);
         deploymentModule.deploymentService().invalidateWorkspace(workspaceId);
-        undeployPlugins(workspaceId);
-    }
-
-    private void undeployPlugins(String workspaceId) {
-        List<String> nodeIds = workspaceNodeIds.remove(workspaceId);
-        if (nodeIds != null)
-            for (String nodeId : nodeIds)
-                PluginRegistry.removeInstance(nodeId);
-        List<String> resIds = workspaceResourceIds.remove(workspaceId);
-        if (resIds != null)
-            for (String resId : resIds)
-                globalResourceRegistry.removeResource(resId);
     }
 
     @Override
@@ -393,6 +156,10 @@ public final class DefaultRuntimeEngine implements RuntimeEngine {
     @Override
     public void setNodeEnabled(String workspaceId, String flowId, String nodeId, boolean enabled) {
         executionService.setNodeEnabled(workspaceId, flowId, nodeId, enabled);
+    }
+
+    public boolean validateScript(String language, String script, Map<String, Object> errorContainer) {
+        return true;
     }
 
     @Override

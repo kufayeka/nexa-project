@@ -80,10 +80,6 @@ public final class InputActivationService implements InputActivator {
             return;
         }
 
-        if (nexa.framework.runtime.domain.scripting.registry.PluginRegistry.hasPlugin(inputNode.type())) {
-            return;
-        }
-
         InputNodeHandler handler = inputNodeHandlerRegistry.requireHandler(inputNode.type());
         handler.activate(inputNode, newInputActivationPort(workspaceRuntime, flowRuntime, runtimeStarted));
     }

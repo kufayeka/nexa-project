@@ -1,3 +1,0 @@
-nexa.plugin.mqtt.node.MqttSharedInputPlugin
-nexa.plugin.mqtt.node.MqttSharedSinkPlugin
-nexa.plugin.mqtt.resource.MqttClientPoolPlugin

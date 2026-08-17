@@ -4,7 +4,6 @@ import nexa.framework.runtime.domain.deployment.api.DeploymentService;
 import nexa.framework.runtime.domain.deployment.controller.DefaultDeploymentService;
 import nexa.framework.runtime.domain.deployment.service.FlowCompiler;
 import nexa.framework.runtime.domain.deployment.service.FlowValidator;
-import nexa.framework.runtime.domain.scripting.registry.ScriptEngineRegistry;
 
 /**
  * DeploymentModule merakit kebutuhan internal untuk domain kompilasi/deployment.
@@ -14,11 +13,9 @@ public final class DeploymentModule {
 
     private final DeploymentService deploymentService;
 
-    // Dependensi disuntikkan secara eksplisit via constructor
-    public DeploymentModule(ScriptEngineRegistry scriptEngineRegistry) {
+    public DeploymentModule() {
         FlowValidator validator = new FlowValidator();
-        // FlowCompiler membutuhkan validator dan script registry dari domain scripting
-        FlowCompiler compiler = new FlowCompiler(validator, scriptEngineRegistry);
+        FlowCompiler compiler = new FlowCompiler(validator);
         this.deploymentService = new DefaultDeploymentService(compiler);
     }
 

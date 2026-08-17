@@ -81,7 +81,7 @@ public final class CompiledFlow {
         }
         nodeById.put(nodeId, new CompiledNode(
                 node.id(), node.category(), node.type(), enabled,
-                node.inputPolicy(), node.config(), node.language(), node.compiledScript()));
+                node.inputPolicy(), node.config(), node.language()));
     }
 
     public synchronized void setConnectionEnabled(String connectionId, boolean enabled) {

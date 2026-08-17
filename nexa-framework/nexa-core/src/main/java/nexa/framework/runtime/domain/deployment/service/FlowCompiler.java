@@ -10,16 +10,12 @@ import nexa.framework.runtime.domain.workspace.model.FlowDefinition;
 import nexa.framework.runtime.domain.workspace.model.NodeCategory;
 import nexa.framework.runtime.domain.workspace.model.NodeDefinition;
 import nexa.framework.runtime.domain.workspace.model.WorkspaceDefinition;
-import nexa.framework.runtime.domain.scripting.api.CompiledScript;
-import nexa.framework.runtime.domain.scripting.api.ScriptEngine;
-import nexa.framework.runtime.domain.scripting.registry.ScriptEngineRegistry;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.time.Duration;
@@ -31,18 +27,10 @@ import java.nio.charset.StandardCharsets;
 public final class FlowCompiler {
     private static final System.Logger LOGGER = System.getLogger(FlowCompiler.class.getName());
     private final FlowValidator validator;
-    private final ScriptEngineRegistry scriptEngineRegistry;
     private final ConcurrentMap<String, WorkspaceCompilationSnapshot> workspaceCompilationCache;
 
-    public FlowCompiler(FlowValidator validator) { this(validator, loadScriptEngines()); }
-    public FlowCompiler(FlowValidator validator, List<ScriptEngine> scriptEngines) {
+    public FlowCompiler(FlowValidator validator) {
         this.validator = validator;
-        this.scriptEngineRegistry = new ScriptEngineRegistry(scriptEngines);
-        this.workspaceCompilationCache = new ConcurrentHashMap<>();
-    }
-    public FlowCompiler(FlowValidator validator, ScriptEngineRegistry scriptEngineRegistry) {
-        this.validator = validator;
-        this.scriptEngineRegistry = scriptEngineRegistry;
         this.workspaceCompilationCache = new ConcurrentHashMap<>();
     }
 
@@ -82,9 +70,8 @@ public final class FlowCompiler {
         validator.validate(definition);
         Map<String, CompiledNode> nodeById = new LinkedHashMap<>();
         for (NodeDefinition nodeDefinition : definition.nodes()) {
-            CompiledScript compiledScript = compileNodeScript(workspaceId, definition.id(), nodeDefinition);
             nodeById.put(nodeDefinition.id(), new CompiledNode(nodeDefinition.id(), nodeDefinition.category(), nodeDefinition.type(),
-                    nodeDefinition.enabled(), nodeDefinition.inputPolicy(), nodeDefinition.config(), resolveLanguage(nodeDefinition), compiledScript));
+                    nodeDefinition.enabled(), nodeDefinition.inputPolicy(), nodeDefinition.config(), resolveLanguage(nodeDefinition)));
         }
 
         Map<String, Map<String, List<String>>> routes = new LinkedHashMap<>();
@@ -107,9 +94,8 @@ public final class FlowCompiler {
 
     public void invalidateWorkspaceScripts(String workspaceId) {
         workspaceCompilationCache.remove(workspaceId);
-        scriptEngineRegistry.invalidateWorkspace(workspaceId);
     }
-    public void dispose() { workspaceCompilationCache.clear(); scriptEngineRegistry.dispose(); }
+    public void dispose() { workspaceCompilationCache.clear(); }
 
     private CompiledFlow resolveCachedFlow(WorkspaceCompilationSnapshot snapshot, String flowId, String flowSignature) {
         if (snapshot == null) return null;
@@ -159,25 +145,6 @@ public final class FlowCompiler {
             compiledFlows = Map.copyOf(new LinkedHashMap<>(compiledFlows));
             flowSignatures = Map.copyOf(new LinkedHashMap<>(flowSignatures));
         }
-    }
-
-    private static List<ScriptEngine> loadScriptEngines() {
-        List<ScriptEngine> engines = new ArrayList<>();
-        for (ScriptEngine engine : ServiceLoader.load(ScriptEngine.class)) engines.add(engine);
-        return List.copyOf(engines);
-    }
-
-    private CompiledScript compileNodeScript(String workspaceId, String flowId, NodeDefinition nodeDefinition) {
-        if (nodeDefinition.category() != NodeCategory.EXECUTOR) return null;
-        if (nexa.framework.runtime.domain.scripting.registry.PluginRegistry.hasPlugin(nodeDefinition.type())) return null;
-        Object scriptRaw = nodeDefinition.config().get("code");
-        if (!(scriptRaw instanceof String)) scriptRaw = nodeDefinition.config().get("script");
-        if (!(scriptRaw instanceof String scriptSource)) throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId + " requires string config.code or config.script");
-        String language = resolveLanguage(nodeDefinition);
-        if (language == null || language.isBlank()) throw new ValidationException("Executor node " + nodeDefinition.id() + " in flow " + flowId + " requires language");
-        ScriptEngine scriptEngine = scriptEngineRegistry.require(language, flowId, nodeDefinition.id());
-        LOGGER.log(System.Logger.Level.INFO, "Compile script workspace={0} flow={1} node={2} language={3}", workspaceId, flowId, nodeDefinition.id(), language);
-        return scriptEngine.compiler().compile(scriptSource, workspaceId + ":" + flowId + ":" + nodeDefinition.id());
     }
 
     private String resolveLanguage(NodeDefinition nodeDefinition) {

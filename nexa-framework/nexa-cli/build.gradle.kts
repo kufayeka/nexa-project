@@ -13,7 +13,7 @@ dependencies {
 
     implementation(libs.jackson.databind)
     implementation(project(":nexa-core"))
-    implementation(project(":nexa-script-engine"))
+
 }
 
 java {

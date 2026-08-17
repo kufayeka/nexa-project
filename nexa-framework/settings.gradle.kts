@@ -11,8 +11,5 @@ plugins {
 rootProject.name = "nexa-framework"
 include("nexa-api")
 include("nexa-core")
-include("nexa-script-engine")
 include("nexa-compiler")
 include("nexa-cli")
-include("nexa-mqtt-plugin")
-include("nexa-control-plugin")
