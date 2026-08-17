@@ -50,14 +50,7 @@ public final class NexaParser {
     private Stmt forStmt() {
         int st = prev().span().start();
         expect(NexaToken.Kind.LPAREN);
-
-        // Nexa accepts both forms:
-        //   for (item: INT32 in xs) { ... }
-        //   for (let item: INT32 in xs) { ... }
-        // The former is the canonical compact loop syntax; the latter is
-        // accepted for symmetry with normal variable declarations.
         match(NexaToken.Kind.LET);
-
         String n = expect(NexaToken.Kind.IDENT).text();
         expect(NexaToken.Kind.COLON);
         NexaType t = type();
@@ -65,10 +58,8 @@ public final class NexaParser {
         Expr it = expr();
         expect(NexaToken.Kind.RPAREN);
         expect(NexaToken.Kind.LBRACE);
-
         List<Stmt> b = new ArrayList<>();
         while (!at(NexaToken.Kind.RBRACE)) b.add(stmt());
-
         NexaToken r = expect(NexaToken.Kind.RBRACE);
         return new For(n, t, it, b, span(st, r.span().end()));
     }
@@ -129,7 +120,9 @@ public final class NexaParser {
     private Expr primary() {
         NexaToken t = next();
         return switch (t.kind()) {
-            case INT -> new Literal(Long.parseLong(t.text()), NexaType.INT64, t.span());
+            // Unsuffixed integer literals use INT32 as Nexa's default integer type.
+            // Explicitly wider values can still be represented by typed expressions.
+            case INT -> new Literal(Integer.valueOf(t.text()), NexaType.INT32, t.span());
             case FLOAT -> new Literal(Double.parseDouble(t.text()), NexaType.FLOAT64, t.span());
             case STRING -> new Literal(t.text(), NexaType.STRING, t.span());
             case TRUE -> new Literal(true, NexaType.BOOLEAN, t.span()); case FALSE -> new Literal(false, NexaType.BOOLEAN, t.span());
