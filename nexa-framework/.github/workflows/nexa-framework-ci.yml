@@ -1,0 +1,68 @@
+name: Nexa Framework CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'agent/**'
+    paths:
+      - 'nexa-framework/**'
+      - '.github/workflows/nexa-framework-ci.yml'
+  pull_request:
+    paths:
+      - 'nexa-framework/**'
+      - '.github/workflows/nexa-framework-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexa-framework-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & Test Nexa Framework
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: nexa-framework
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+          cache-dependency-path: nexa-framework/**/*.gradle*
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Verify Gradle wrapper
+        run: ./gradlew --version
+
+      - name: Run all tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-framework-test-reports
+          path: nexa-framework/**/build/reports/tests/test/
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-framework-test-results
+          path: nexa-framework/**/build/test-results/test/
+          if-no-files-found: ignore
