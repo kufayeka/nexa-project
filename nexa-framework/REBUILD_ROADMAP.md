@@ -1,198 +1,122 @@
-# Nexa Compiled Runtime Rebuild
+# Nexa Compiled Runtime Rebuild Roadmap 🚀
 
-## Goal
+This document defines the architecture, boundary separation, and phased roadmap to transform Nexa from an interpreted, AST-evaluated flow runtime into a **compiled, low-latency industrial automation runtime** that executes native JVM bytecode.
 
-Build Nexa as a compiled automation runtime with predictable low latency, strong type safety, safe plugin boundaries, and a deployment model that executes compiled JVM bytecode rather than interpreting Nexa source at runtime.
+---
 
-## Target execution model
+## 🏗️ 1. Decoupled System Architecture
 
-```text
-Nexa source / workspace configuration
-        |
-        v
-Lexer -> Parser -> Typed AST -> Semantic analysis
-        |
-        v
-      Nexa IR
-        |
-        v
-    IR optimizer
-        |
-        v
-   JVM bytecode backend
-        |
-        v
-Compiled workspace artifact (.jar/container of .class files)
-        |
-        v
-      JVM HotSpot
-        |
-        v
- native machine code (JIT)
+To ensure strict separation of concerns, the Nexa framework is divided into four completely decoupled subsystems. No module has direct implementation dependencies on other hot-path or control-plane components; communication is strictly through APIs and SPI boundaries.
+
+```mermaid
+graph TD
+    subgraph "1. Nexa Compiler Suite"
+        Source["Nexa DSL / Script"] --> Frontend["Frontend (Parser & AST)"]
+        Frontend --> Semantic["Semantic Analyzer"]
+        Semantic --> Lowerer["IR Lowerer & Optimizer"]
+        Lowerer --> Codegen["JVM Bytecode Generator (ASM)"]
+        Codegen --> Packager["Artifact Packager (.jar)"]
+    end
+
+    subgraph "2. Workspace Control Plane"
+        WConfig["Workspace Config (JSON)"] --> WManager["Workspace Manager"]
+        WManager --> Validator["Deployment Validator"]
+        Validator --> DynamicLoader["Dynamic Class Loader"]
+        Packager -.-> WManager
+    end
+
+    subgraph "3. Flow Execution Engine (Data Plane)"
+        DynamicLoader --> Engine["Execution Engine"]
+        Engine --> FlowGraph["Flow & Node Topology"]
+        FlowGraph --> VirtualThreads["Virtual Threads (Concurrency)"]
+        VirtualThreads --> TagStore["Slot-based Typed TagStore"]
+        VirtualThreads --> Isolation["Message State Isolation"]
+    end
+
+    subgraph "4. Plugin & Host Interface"
+        VirtualThreads --> HostCap["Host Capabilities API"]
+        HostCap --> MQTT["MQTT Plugin"]
+        HostCap --> Modbus["Modbus Plugin"]
+    end
 ```
 
-The JAR is a deployment artifact. JVM class bytecode is the execution representation.
+### 1.1 Workspace Control Plane (Control Plane)
+* **Responsibility**: Manages workspace lifecycle, deployments, validation, configuration storage, and administrative control.
+* **Decoupling**: Has no direct execution code. It communicates with the data plane via dynamic class loading and configuration swaps. It ensures that a failed compilation never affects a running system.
 
-## Phase 0 - Architecture and contracts
+### 1.2 Flow Execution Engine (Data Plane / Hot Path)
+* **Responsibility**: Orchestrates the hot data path. Executes nodes, manages message propagation, runs concurrent tasks via virtual threads, and isolates state across message paths.
+* **Decoupling**: Knows nothing about source code, lexers, or parsers. It only runs compiled JVM class instances representing the nodes. It accesses tag values via slot offsets in the memory-optimized `TypedTagStore`.
 
-- Define compiler/runtime/plugin boundaries.
-- Separate control plane from the hot data plane.
-- Define immutable compiled workspace artifacts.
-- Define host capabilities so plugins remain implementation-isolated.
-- Define deployment validation and atomic workspace replacement.
-- Establish that runtime never parses or interprets Nexa source during normal execution.
+### 1.3 Nexa Compiler Suite (AOT Compiler)
+* **Responsibility**: Translates source code, schemas, and configurations into optimized execution representation (JVM Bytecode).
+* **Decoupling**: A standalone module that runs out-of-process or in a separate compilation sandbox. It is entirely stateless, consuming a `CompilationRequest` and yielding a `CompilationResult` (containing `.class` bytes and metadata).
 
-## Phase 1 - Nexa language and type system
+### 1.4 Plugin & Host Interface (Plugin Subsystem)
+* **Responsibility**: Provides access to third-party protocols (Modbus, MQTT) and system resources (Database pools, filesystem).
+* **Decoupling**: Plugins interact with the execution data plane strictly through abstract **Host Capabilities** and registered schemas. The core engine never links to concrete plugin implementations.
 
-Canonical scalar types:
+---
 
-- BOOLEAN
-- INT8 / INT16 / INT32 / INT64
-- UINT8 / UINT16 / UINT32 / UINT64
-- FLOAT32 / FLOAT64
-- STRING
-- ARRAY<T>
-- OBJECT
-- user-defined structural object types
+## 🎯 2. Execution Strategy: What to Build First?
 
-Required language features:
+To achieve true compiled performance, we must execute our milestones in a precise order:
 
-- typed `let` declarations
-- typed function signatures
-- structural object types
-- generic arrays
-- field access
-- loops
-- conditionals
-- arithmetic and boolean operators
-- explicit/defined numeric conversion rules
-- `self`, `oldValue`, `newValue`, timestamp and quality execution context
-- compile-time validation of tag names, types and host capability signatures
-
-## Phase 2 - Typed Nexa IR
-
-The IR is the stable compiler boundary between the language frontend and execution backend.
-
-The initial IR should represent typed operations such as:
-
-- constants
-- local load/store
-- tag load/store
-- self load/store
-- field load/store
-- array operations
-- arithmetic/comparison
-- branches/loops
-- function calls
-- host capability calls
-- return
-
-IR must preserve static type information and avoid Object-based operations on primitive hot paths.
-
-## Phase 3 - JVM bytecode compiler
-
-- Generate JVM `.class` bytes directly; do not generate Java source.
-- Keep generated code deterministic and inspectable.
-- Map primitive Nexa operations to JVM primitive instructions.
-- Keep host/plugin calls behind stable runtime interfaces.
-- Add bytecode verification tests.
-
-## Phase 4 - Compiled workspace artifact
-
-A workspace is compiled before deployment and packaged as an immutable artifact.
-
-Artifact should contain:
-
-- workspace identity/version
-- compiler version
-- target/runtime compatibility
-- compiled class bytes
-- symbol/type metadata
-- dependency metadata
-- diagnostics/build information
-
-Deployment flow:
-
-```text
-source/config -> compile -> validate -> package -> stage -> atomic activate
+```mermaid
+gantt
+    title Nexa Rebuild Phased Order
+    dateFormat  YYYY-MM-DD
+    section Phase 1 & 2
+    Nexa Language & IR Lowerer (Done)  :done, des1, 2026-08-10, 2026-08-16
+    section Phase 3
+    JVM Bytecode Generator (NEXT) :active, des2, 2026-08-17, 2026-08-25
+    section Phase 4
+    Workspace Artifact Packaging  : des3, 2026-08-26, 2026-09-02
+    section Phase 5 & 6
+    TagStore, Engine & Scheduler Integration : des4, 2026-09-03, 2026-09-12
 ```
 
-A failed compilation must never replace the currently active workspace.
+> [!IMPORTANT]
+> **Immediate Action Item**: We must build **Phase 3 (JVM Bytecode Compiler)** next. We have the Frontend and the IR ready. Building the Bytecode Generator will allow us to convert optimized Nexa IR blocks directly to `.class` byte arrays, completely removing the AST interpreter from the hot path.
 
-## Phase 5 - Asset TagStore and dependency engine
+---
 
-Hot-path tag storage must be typed and slot-based rather than `Map<String, Object>` lookups.
+## 🚀 3. Phased Implementation Roadmap
 
-The asset compiler resolves tag references to stable slot metadata at compile time where possible.
+### Phase 1: Nexa Language Frontend (COMPLETED)
+- Lexer, Parser, AST, and strict Type System (primitives, structural types, dynamic `OBJECT` escape hatch).
+- Semantic verification of assignments, variables, boundaries, and constant/narrowing conversions (both integers and decimals).
 
-Dependency graph propagation should execute only affected tags instead of scanning every tag on every cycle.
+### Phase 2: Lowering to Nexa IR (COMPLETED)
+- Stable translation boundary between high-level language AST and low-level code generator.
+- SSA-like IR containing typed instructions (loads, stores, arithmetic, condition branches, call hooks).
+- Static IR optimization pass and verification constraints.
 
-## Phase 6 - Runtime scheduler
+### Phase 3: JVM Bytecode Compiler (ACTIVE NEXT STEP)
+- Integrate **ASM** library to dynamically write Java bytecode.
+- Translate Nexa IR instruction blocks to exact JVM bytecode instructions (e.g., mapping Nexa `INT32` to JVM `IADD`/`ISUB`, Nexa `FLOAT64` to `DADD`, etc.).
+- Prevent boxing/unboxing overhead for primitive calculations on hot execution paths.
+- Generate standalone class files representing compiled Nexa logic.
 
-Execution lanes:
+### Phase 4: Workspace Artifact Packager
+- Package compiled classes and deployment metadata into an immutable `.jar` file.
+- Define a secure, read-only class loader to spin up compiled scripts at runtime.
+- Design the deployment validation interface (`gcloud`-like validation before hot-swap).
 
-- high-speed deterministic lane for short non-blocking calculations
-- normal automation lane
-- background/low-priority lane
-- event-driven lane
+### Phase 5: Slot-Based TagStore & Dependency Engine (PARTIALLY COMPLETED)
+- Refactor variable/tag access to use memory slot offsets instead of dynamic map lookup keys.
+- Tag propagation logic in `TagDependencyEngine` to execute only downstream paths affected by a tag write, eliminating full topology scans.
 
-High-speed scripts must not perform blocking I/O or unbounded host calls.
+### Phase 6: Thread-Isolated Concurrency Scheduler
+- Allocate Virtual Threads dynamically per incoming execution trigger.
+- Implement deep clone / copy-on-write isolation for messages moving down parallel path forks.
+- Distinguish between deterministic high-speed calculation lanes and non-blocking background task lanes.
 
-The scheduler must track execution deadlines, failures and missed cycles.
+### Phase 7: Plugin Boundary & Host Capabilities API
+- Expose stable signature declarations for external capabilities (MQTT publish, Modbus write).
+- Compile plugin-calls into direct invoke virtual/interface JVM bytecode instructions.
 
-## Phase 7 - Plugin Host API
-
-Plugins remain independent modules. Nexa interacts with them through registered host capabilities/signatures rather than depending on plugin implementations.
-
-Examples:
-
-```text
-mqtt.publish(STRING, OBJECT) -> VOID
-control.read(STRING) -> typed value
-control.write(STRING, typed value) -> VOID
-asset.read(STRING) -> typed value
-asset.write(STRING, typed value) -> VOID
-```
-
-The compiler validates capability names and signatures before deployment.
-
-## Phase 8 - JIT/runtime optimization
-
-Measure before optimizing. Focus on:
-
-- allocation rate
-- boxing
-- tag lookup overhead
-- dependency propagation
-- scheduler overhead
-- host-call overhead
-- JIT warmup
-- GC pauses
-
-Avoid custom VM machinery unless benchmarks demonstrate a concrete JVM limitation.
-
-## Phase 9 - Hardcore benchmark
-
-Measure end-to-end latency and throughput for:
-
-- 1k / 10k / 50k tags
-- 100ms / 50ms / 20ms cycles
-- primitive calculations
-- multi-tag calculations
-- dependency fan-out/fan-in
-- JSON/object-heavy workloads
-- mixed workloads
-
-Report p50, p95, p99 and p99.9 latency, CPU, allocation, GC pauses, missed deadlines and throughput.
-
-## Phase 10 - Production hardening
-
-- execution budgets
-- fault isolation
-- watchdogs
-- deployment rollback
-- artifact compatibility checks
-- security restrictions on generated code
-- diagnostics/observability
-- deterministic lifecycle behavior
-- backward-compatible plugin contracts
+### Phase 8: Benchmarks, JIT Warmup, and Optimization
+- Benchmark with 10k/50k concurrent tags and 20ms schedules.
+- Profile garbage collection, allocation rates, and boxing overhead on JVM HotSpot.
+- Warm up compilation classloaders to prevent JIT lag.
