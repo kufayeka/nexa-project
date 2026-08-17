@@ -35,8 +35,55 @@ public final class StrictNexaTypeChecker {
     }
     private NexaType common(NexaType a,NexaType b,SourceSpan s){a=resolve(a);b=resolve(b);if(NexaType.same(a,b))return a;if(NexaType.numeric(a)&&NexaType.numeric(b)){if(a.displayName().equals("FLOAT64")||b.displayName().equals("FLOAT64"))return NexaType.FLOAT64;if(a.displayName().equals("FLOAT32")||b.displayName().equals("FLOAT32"))return NexaType.FLOAT32;if(rank(a)>=rank(b))return a;return b;}bad("No compatible types: "+a.displayName()+" and "+b.displayName(),s);return NexaType.OBJECT;}
     private boolean compatible(NexaType a,NexaType b){return NexaType.same(resolve(a),resolve(b))||(NexaType.numeric(a)&&NexaType.numeric(b));}
-    private void require(NexaType target,NexaType value,Expr source,String where){target=resolve(target);value=resolve(value);if(NexaType.same(target,value))return;if(source instanceof Literal l && numericLiteralFits(l,target))return;if(NexaType.numeric(target)&&NexaType.numeric(value)&&rank(value)<=rank(target)&&!(value.displayName().startsWith("UINT")&&!target.displayName().startsWith("UINT")))return;bad("Type mismatch in "+where+": expected "+target.displayName()+", got "+value.displayName(),source.span());}
-    private boolean numericLiteralFits(Literal l,NexaType t){if(!(l.value() instanceof Number n)||!NexaType.numeric(t))return false;double v=n.doubleValue();return switch(t.displayName()){case "INT8"->v>=-128&&v<=127;case "INT16"->v>=-32768&&v<=32767;case "INT32"->v>=Integer.MIN_VALUE&&v<=Integer.MAX_VALUE;case "INT64"->true;case "UINT8"->v>=0&&v<=255;case "UINT16"->v>=0&&v<=65535;case "UINT32"->v>=0&&v<=4294967295d;case "UINT64"->v>=0;case "FLOAT32"->Double.isFinite(v);case "FLOAT64"->Double.isFinite(v);default->false;};}
+
+    private void require(NexaType target,NexaType value,Expr source,String where){
+        target=resolve(target); value=resolve(value);
+
+        // Numeric literals are constants, so range validation must happen before
+        // same-type/widening checks. Otherwise e.g. INT32 = 2147483648 or
+        // UINT32 = 4294967296 would incorrectly pass as an INT32->UINT32
+        // conversion simply because their ranks are compatible.
+        Number constant=constantNumericValue(source);
+        if(constant!=null && NexaType.numeric(target)){
+            if(numericConstantFits(constant,target)) return;
+            bad("Numeric literal out of range for "+target.displayName(),source.span());
+            return;
+        }
+
+        if(NexaType.same(target,value))return;
+        if(NexaType.numeric(target)&&NexaType.numeric(value)&&rank(value)<=rank(target)&&!(value.displayName().startsWith("UINT")&&!target.displayName().startsWith("UINT")))return;
+        bad("Type mismatch in "+where+": expected "+target.displayName()+", got "+value.displayName(),source.span());
+    }
+
+    private Number constantNumericValue(Expr e){
+        if(e instanceof Literal l && l.value() instanceof Number n) return n;
+        if(e instanceof Unary u && (u.op().equals("+") || u.op().equals("-"))){
+            Number n=constantNumericValue(u.expr());
+            if(n==null) return null;
+            if(n instanceof Double d) return u.op().equals("-") ? -d : d;
+            if(n instanceof Float f) return u.op().equals("-") ? -f : f;
+            long v=n.longValue();
+            return u.op().equals("-") ? -v : v;
+        }
+        return null;
+    }
+
+    private boolean numericConstantFits(Number n,NexaType t){
+        double v=n.doubleValue();
+        return switch(t.displayName()){
+            case "INT8"->v>=-128&&v<=127;
+            case "INT16"->v>=-32768&&v<=32767;
+            case "INT32"->v>=Integer.MIN_VALUE&&v<=Integer.MAX_VALUE;
+            case "INT64"->v>=Long.MIN_VALUE&&v<=Long.MAX_VALUE;
+            case "UINT8"->v>=0&&v<=255;
+            case "UINT16"->v>=0&&v<=65535;
+            case "UINT32"->v>=0&&v<=4294967295d;
+            case "UINT64"->v>=0;
+            case "FLOAT32","FLOAT64"->Double.isFinite(v);
+            default->false;
+        };
+    }
+
     private int rank(NexaType t){return switch(t.displayName()){case "INT8","UINT8"->1;case "INT16","UINT16"->2;case "INT32","UINT32"->3;case "INT64","UINT64"->4;case "FLOAT32"->5;case "FLOAT64"->6;default->0;};}
     private NexaType resolve(NexaType t){if(t instanceof NexaType.Named n){NexaType r=types.get(n.name());if(r==null){bad("Unknown type: "+n.name(),new SourceSpan(0,0));return NexaType.OBJECT;}return r;}if(t instanceof NexaType.Array a)return new NexaType.Array(resolve(a.element()));if(t instanceof NexaType.ObjectType o){Map<String,NexaType> f=new LinkedHashMap<>();o.fields().forEach((k,v)->f.put(k,resolve(v)));return new NexaType.ObjectType(f);}return t;}
     private boolean lvalue(Expr e){return e instanceof Var||e instanceof Field||e instanceof Index;}private void define(String n,NexaType t){scopes.peek().put(n,t);}private NexaType lookup(String n){for(var s:scopes)if(s.containsKey(n))return s.get(n);return null;}private void bad(String m,SourceSpan s){errors.add(new Diagnostic(m,s));}
