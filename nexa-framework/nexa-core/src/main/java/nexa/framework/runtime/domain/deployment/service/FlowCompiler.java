@@ -90,16 +90,21 @@ public final class FlowCompiler {
             if (nodeDefinition.category() == NodeCategory.EXECUTOR && "script".equals(nodeDefinition.type())) {
                 String script = (String) nodeDefinition.config().get("script");
                 if (script == null) script = (String) nodeDefinition.config().get("code");
-                if (script != null && compilerService != null) {
+                if (script != null) {
+                    if (compilerService == null) {
+                        throw new ValidationException("Nexa compiler service is not available while compiling node " + nodeDefinition.id());
+                    }
                     try {
-                        String className = "nexa.generated.Node_" + nodeDefinition.id().replace('-', '_');
+                        String className = "nexa.generated.Node_" + sanitizeClassPart(workspaceId) + "_" + sanitizeClassPart(definition.id()) + "_" + sanitizeClassPart(nodeDefinition.id());
                         byte[] classBytes = compilerService.compile(className, script, tagSlots);
                         classLoader.registerClass(className, classBytes);
                         Class<?> clazz = classLoader.loadClass(className);
                         executableNode = (nexa.framework.runtime.api.NexaCompiledNode) clazz.getDeclaredConstructor().newInstance();
                     } catch (Exception e) {
-                        LOGGER.log(System.Logger.Level.ERROR, "Gagal mengompilasi node " + nodeDefinition.id(), e);
+                        throw new ValidationException("Failed to compile Nexa executor node " + nodeDefinition.id() + ": " + e.getMessage());
                     }
+                } else {
+                    throw new ValidationException("Nexa executor node " + nodeDefinition.id() + " has no script/code configuration");
                 }
             }
             nodeById.put(nodeDefinition.id(), new CompiledNode(nodeDefinition.id(), nodeDefinition.category(), nodeDefinition.type(),
@@ -196,5 +201,9 @@ public final class FlowCompiler {
     private String resolveLanguage(NodeDefinition nodeDefinition) {
         if (nodeDefinition.language() != null && !nodeDefinition.language().isBlank()) return nodeDefinition.language();
         return nodeDefinition.type();
+    }
+
+    private String sanitizeClassPart(String value) {
+        return value == null || value.isBlank() ? "anonymous" : value.replaceAll("[^A-Za-z0-9_$]", "_");
     }
 }
