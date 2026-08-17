@@ -23,9 +23,12 @@ import java.time.Instant;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class FlowCompiler {
     private static final System.Logger LOGGER = System.getLogger(FlowCompiler.class.getName());
+    private static final Pattern TAG_REFERENCE = Pattern.compile("\\$([A-Za-z_][A-Za-z0-9_]*)");
     private final FlowValidator validator;
     private final ConcurrentMap<String, WorkspaceCompilationSnapshot> workspaceCompilationCache;
     private final nexa.framework.runtime.api.NexaCompilerService compilerService;
@@ -45,6 +48,7 @@ public final class FlowCompiler {
     public CompiledWorkspace compileWorkspace(WorkspaceDefinition definition) {
         if (definition == null) throw new ValidationException("Workspace definition must not be null");
         if (definition.id() == null || definition.id().isBlank()) throw new ValidationException("Workspace id must not be blank");
+        registerTags(definition);
         Instant startedAt = Instant.now();
         WorkspaceCompilationSnapshot previousSnapshot = workspaceCompilationCache.get(definition.id());
         Map<String, CompiledFlow> compiledFlows = new LinkedHashMap<>();
@@ -56,7 +60,6 @@ public final class FlowCompiler {
             if (compiledFlow == null) {
                 compiledFlow = compileFlow(definition.id(), flowDefinition);
             } else {
-                // Runtime control mutates compiled connection state. Re-apply the persisted definition state on redeploy.
                 for (ConnectionDefinition connection : flowDefinition.connections()) {
                     compiledFlow.setConnectionEnabled(connection.id(), Boolean.TRUE.equals(connection.enabled()));
                 }
@@ -72,6 +75,11 @@ public final class FlowCompiler {
         return new CompiledWorkspace(definition.id(), definition.enabled(), compiledFlows);
     }
 
+    /** Returns the stable symbolic tag -> JVM slot mapping used by compiled scripts. */
+    public Map<String, Integer> tagSlotsSnapshot() {
+        return Map.copyOf(new LinkedHashMap<>(tagSlots));
+    }
+
     public CompiledFlow compileFlow(FlowDefinition definition) { return compileFlow("unknown", definition); }
 
     public CompiledFlow compileFlow(String workspaceId, FlowDefinition definition) {
@@ -81,9 +89,7 @@ public final class FlowCompiler {
             nexa.framework.runtime.api.NexaCompiledNode executableNode = null;
             if (nodeDefinition.category() == NodeCategory.EXECUTOR && "script".equals(nodeDefinition.type())) {
                 String script = (String) nodeDefinition.config().get("script");
-                if (script == null) {
-                    script = (String) nodeDefinition.config().get("code");
-                }
+                if (script == null) script = (String) nodeDefinition.config().get("code");
                 if (script != null && compilerService != null) {
                     try {
                         String className = "nexa.generated.Node_" + nodeDefinition.id().replace('-', '_');
@@ -118,10 +124,24 @@ public final class FlowCompiler {
         return new CompiledFlow(definition.id(), definition.name(), definition.enabled(), nodeById, routes, connectionById);
     }
 
-    public void invalidateWorkspaceScripts(String workspaceId) {
-        workspaceCompilationCache.remove(workspaceId);
-    }
+    public void invalidateWorkspaceScripts(String workspaceId) { workspaceCompilationCache.remove(workspaceId); }
     public void dispose() { workspaceCompilationCache.clear(); }
+
+    private void registerTags(WorkspaceDefinition definition) {
+        List<String> names = new ArrayList<>();
+        for (FlowDefinition flow : definition.flows()) {
+            for (NodeDefinition node : flow.nodes()) {
+                if (node.category() != NodeCategory.EXECUTOR) continue;
+                Object raw = node.config().get("script");
+                if (raw == null) raw = node.config().get("code");
+                if (!(raw instanceof String script)) continue;
+                Matcher matcher = TAG_REFERENCE.matcher(script);
+                while (matcher.find()) names.add(matcher.group(1));
+            }
+        }
+        Collections.sort(names);
+        for (String name : names) tagSlots.computeIfAbsent(name, ignored -> tagSlots.size());
+    }
 
     private CompiledFlow resolveCachedFlow(WorkspaceCompilationSnapshot snapshot, String flowId, String flowSignature) {
         if (snapshot == null) return null;
