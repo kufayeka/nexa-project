@@ -18,20 +18,26 @@ public final class ExecutionContext {
     private final ConcurrentMap<String, Object> data;
     private final AtomicBoolean cancellationRequested;
     private final AtomicInteger activeTaskCounter;
+    private final nexa.framework.runtime.api.state.TypedTagStore tagStore;
     private volatile Throwable failure;
     private volatile ExecutionStatus status;
     private volatile ScheduledFuture<?> timeoutTask;
 
-    public ExecutionContext(String workspaceId, String flowId, Instant createdAt, Instant deadline) {
+    public ExecutionContext(String workspaceId, String flowId, Instant createdAt, Instant deadline, nexa.framework.runtime.api.state.TypedTagStore tagStore) {
         this.executionId = UUID.randomUUID();
         this.workspaceId = workspaceId;
         this.flowId = flowId;
         this.createdAt = createdAt;
         this.deadline = deadline;
+        this.tagStore = tagStore;
         this.data = new ConcurrentHashMap<>();
         this.cancellationRequested = new AtomicBoolean(false);
         this.activeTaskCounter = new AtomicInteger(0);
         this.status = ExecutionStatus.RUNNING;
+    }
+
+    public nexa.framework.runtime.api.state.TypedTagStore tagStore() {
+        return tagStore;
     }
 
     public UUID executionId() {

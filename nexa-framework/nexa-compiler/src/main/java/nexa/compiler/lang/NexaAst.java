@@ -24,12 +24,13 @@ public final class NexaAst {
         public For { body = List.copyOf(body); }
     }
 
-    public sealed interface Expr permits Literal, Var, Unary, Binary, Field, Index, Array, ObjectLit, Call {
+    public sealed interface Expr permits Literal, Var, TagRef, Unary, Binary, Field, Index, Array, ObjectLit, Call {
         SourceSpan span();
     }
 
     public record Literal(Object value, NexaType type, SourceSpan span) implements Expr {}
     public record Var(String name, SourceSpan span) implements Expr {}
+    public record TagRef(String name, SourceSpan span) implements Expr {}
     public record Unary(String op, Expr expr, SourceSpan span) implements Expr {}
     public record Binary(String op, Expr left, Expr right, SourceSpan span) implements Expr {}
     public record Field(Expr target, String name, SourceSpan span) implements Expr {}

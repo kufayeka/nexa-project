@@ -105,6 +105,7 @@ class NexaBytecodeCompilerTest {
         String namespace;
         String name;
         List<Object> args = List.of();
+        private final Map<Integer, Object> tags = new HashMap<>();
 
         @Override public void send(RuntimeMessage msg) {}
         @Override public void send(String port, RuntimeMessage msg) {}
@@ -117,5 +118,14 @@ class NexaBytecodeCompilerTest {
             this.args = new ArrayList<>(args);
             return null;
         }
+
+        @Override public int readTagInt(int index) { return ((Number) tags.getOrDefault(index, 0)).intValue(); }
+        @Override public void writeTagInt(int index, int value) { tags.put(index, value); }
+        @Override public long readTagLong(int index) { return ((Number) tags.getOrDefault(index, 0L)).longValue(); }
+        @Override public void writeTagLong(int index, long value) { tags.put(index, value); }
+        @Override public double readTagDouble(int index) { return ((Number) tags.getOrDefault(index, 0.0)).doubleValue(); }
+        @Override public void writeTagDouble(int index, double value) { tags.put(index, value); }
+        @Override public Object readTagObject(int index) { return tags.get(index); }
+        @Override public void writeTagObject(int index, Object value) { tags.put(index, value); }
     }
 }

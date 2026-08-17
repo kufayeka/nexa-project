@@ -8,7 +8,8 @@ repositories {
 
 dependencies {
     api(project(":nexa-api"))
-    implementation("org.ow2.asm:asm:9.9")
+    implementation("org.ow2.asm:asm:9.7")
+    implementation("org.ow2.asm:asm-commons:9.7")
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

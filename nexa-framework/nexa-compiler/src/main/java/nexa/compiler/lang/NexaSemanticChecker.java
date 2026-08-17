@@ -20,6 +20,7 @@ import nexa.compiler.lang.NexaAst.Program;
 import nexa.compiler.lang.NexaAst.Return;
 import nexa.compiler.lang.NexaAst.Stmt;
 import nexa.compiler.lang.NexaAst.TypeDecl;
+import nexa.compiler.lang.NexaAst.TagRef;
 import nexa.compiler.lang.NexaAst.Unary;
 import nexa.compiler.lang.NexaAst.Var;
 
@@ -61,6 +62,8 @@ public final class NexaSemanticChecker {
 
         define("self", NexaType.OBJECT);
         define("input", NexaType.OBJECT);
+        define("msg", NexaType.OBJECT);
+        define("message", NexaType.OBJECT);
 
         for (Stmt statement : program.statements()) {
             stmt(statement);
@@ -205,6 +208,10 @@ public final class NexaSemanticChecker {
             }
 
             return resolve(type);
+        }
+
+        if (expression instanceof TagRef tag) {
+            return NexaType.OBJECT;
         }
 
         if (expression instanceof Field field) {
@@ -1062,6 +1069,7 @@ public final class NexaSemanticChecker {
     private boolean lvalue(Expr expression) {
 
         return expression instanceof Var
+                || expression instanceof TagRef
                 || expression instanceof Field
                 || expression instanceof Index;
     }

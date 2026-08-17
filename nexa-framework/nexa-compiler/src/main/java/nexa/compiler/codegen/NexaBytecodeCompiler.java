@@ -20,20 +20,38 @@ public final class NexaBytecodeCompiler {
     private static final String ARRAY_LIST = "java/util/ArrayList";
     private static final String LINKED_HASH_MAP = "java/util/LinkedHashMap";
 
+    private final Map<String, Integer> tagSlots;
+
+    public NexaBytecodeCompiler() {
+        this(Map.of());
+    }
+
+    public NexaBytecodeCompiler(Map<String, Integer> tagSlots) {
+        this.tagSlots = Objects.requireNonNull(tagSlots);
+    }
+
     public byte[] compile(NexaIr.Program program) {
+        return compile(program, null);
+    }
+
+    public byte[] compile(NexaIr.Program program, String customClassName) {
         Objects.requireNonNull(program, "program");
         NexaIr.Function main = program.functions().stream()
                 .filter(f -> "main".equals(f.name())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Program does not contain main function"));
-        return compileFunction(program, main);
+        return compileFunction(program, main, customClassName);
     }
 
     public byte[] compileFunction(NexaIr.Program program, NexaIr.Function function) {
+        return compileFunction(program, function, null);
+    }
+
+    public byte[] compileFunction(NexaIr.Program program, NexaIr.Function function, String customClassName) {
         Objects.requireNonNull(program, "program");
         Objects.requireNonNull(function, "function");
-        String name = className(program.name(), function.name());
+        String name = customClassName != null ? customClassName.replace('.', '/') : className(program.name(), function.name());
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-        cw.visit(Opcodes.V25, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, name, null,
+        cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, name, null,
                 "java/lang/Object", new String[]{NODE});
         emitConstructor(cw);
 
@@ -81,8 +99,12 @@ public final class NexaBytecodeCompiler {
             constant(mv, x.value(), x.result().type()); store(mv, x.result(), s);
         } else if (i instanceof NexaIr.LoadLocal x) {
             loadLocal(mv, x.name(), s); store(mv, x.result(), s);
+        } else if (i instanceof NexaIr.LoadTag x) {
+            loadTag(mv, x, s);
         } else if (i instanceof NexaIr.StoreLocal x) {
             load(mv, x.value(), s); convert(mv, x.value().type(), s.localType(x.name())); storeLocal(mv, x.name(), s);
+        } else if (i instanceof NexaIr.StoreTag x) {
+            storeTag(mv, x, s);
         } else if (i instanceof NexaIr.LoadField x) {
             load(mv, x.target(), s); mv.visitLdcInsn(x.field());
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, MAP, "get", "(Ljava/lang/Object;)Ljava/lang/Object;", true);
@@ -276,8 +298,20 @@ public final class NexaBytecodeCompiler {
 
     private void load(MethodVisitor mv, NexaIr.Value v, Slots s) { mv.visitVarInsn(loadOp(v.type()), s.value(v.id())); }
     private void store(MethodVisitor mv, NexaIr.Value v, Slots s) { mv.visitVarInsn(storeOp(v.type()), s.value(v.id())); }
-    private void loadLocal(MethodVisitor mv, String n, Slots s) { mv.visitVarInsn(loadOp(s.localType(n)), s.local(n)); }
-    private void storeLocal(MethodVisitor mv, String n, Slots s) { mv.visitVarInsn(storeOp(s.localType(n)), s.local(n)); }
+    private void loadLocal(MethodVisitor mv, String n, Slots s) {
+        if ("msg".equals(n) || "message".equals(n)) {
+            mv.visitVarInsn(Opcodes.ALOAD, 1);
+        } else {
+            mv.visitVarInsn(loadOp(s.localType(n)), s.local(n));
+        }
+    }
+    private void storeLocal(MethodVisitor mv, String n, Slots s) {
+        if ("msg".equals(n) || "message".equals(n)) {
+            mv.visitVarInsn(Opcodes.ASTORE, 1);
+        } else {
+            mv.visitVarInsn(storeOp(s.localType(n)), s.local(n));
+        }
+    }
 
     private void box(MethodVisitor mv, NexaType type) {
         switch (type.displayName()) {
@@ -326,6 +360,56 @@ public final class NexaBytecodeCompiler {
     private boolean isDouble(NexaType t) { return "FLOAT64".equals(t.displayName()); }
     private boolean isString(NexaType t) { return "STRING".equals(t.displayName()); }
     private boolean isArray(NexaType t) { return t instanceof NexaType.Array; }
+    private boolean isIntLike(NexaType t) {
+        String n = t.displayName();
+        return "INT8".equals(n) || "UINT8".equals(n) || "INT16".equals(n) || "UINT16".equals(n) || "INT32".equals(n) || "UINT32".equals(n);
+    }
+
+    private void loadTag(MethodVisitor mv, NexaIr.LoadTag x, Slots s) {
+        int slotIndex = tagSlots.getOrDefault(x.name(), 0);
+        mv.visitVarInsn(Opcodes.ALOAD, 2);
+        mv.visitLdcInsn(slotIndex);
+        NexaType type = x.result().type();
+        if (isBoolean(type) || isIntLike(type)) {
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "readTagInt", "(I)I", true);
+            store(mv, x.result(), s);
+        } else if (isLong(type)) {
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "readTagLong", "(I)J", true);
+            store(mv, x.result(), s);
+        } else if (isFloat(type) || isDouble(type)) {
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "readTagDouble", "(I)D", true);
+            if (isFloat(type)) {
+                mv.visitInsn(Opcodes.D2F);
+            }
+            store(mv, x.result(), s);
+        } else {
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "readTagObject", "(I)Ljava/lang/Object;", true);
+            unbox(mv, type);
+            store(mv, x.result(), s);
+        }
+    }
+
+    private void storeTag(MethodVisitor mv, NexaIr.StoreTag x, Slots s) {
+        int slotIndex = tagSlots.getOrDefault(x.name(), 0);
+        mv.visitVarInsn(Opcodes.ALOAD, 2);
+        mv.visitLdcInsn(slotIndex);
+        load(mv, x.value(), s);
+        NexaType type = x.value().type();
+        if (isBoolean(type) || isIntLike(type)) {
+            convert(mv, type, NexaType.INT32);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "writeTagInt", "(II)V", true);
+        } else if (isLong(type)) {
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "writeTagLong", "(IJ)V", true);
+        } else if (isFloat(type) || isDouble(type)) {
+            if (isFloat(type)) {
+                mv.visitInsn(Opcodes.F2D);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "writeTagDouble", "(ID)V", true);
+        } else {
+            box(mv, type);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, CTX, "writeTagObject", "(ILjava/lang/Object;)V", true);
+        }
+    }
 
     private String className(String program, String function) {
         String raw = "nexa/generated/" + program + "$" + function;
@@ -349,7 +433,10 @@ public final class NexaBytecodeCompiler {
         }
         int value(int id){ return Objects.requireNonNull(values.get(id),"No JVM slot for value "+id); }
         int local(String n){ return Objects.requireNonNull(locals.get(n),"No JVM slot for local "+n); }
-        NexaType localType(String n){ return Objects.requireNonNull(types.get(n),"No type for local "+n); }
+        NexaType localType(String n){
+            if ("msg".equals(n) || "message".equals(n)) return NexaType.OBJECT;
+            return Objects.requireNonNull(types.get(n),"No type for local "+n);
+        }
         int scratch(){ return nextScratch++; }
         static boolean wide(NexaType t){ return "INT64".equals(t.displayName())||"UINT64".equals(t.displayName())||"FLOAT64".equals(t.displayName()); }
     }

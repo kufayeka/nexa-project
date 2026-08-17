@@ -127,7 +127,9 @@ public final class NexaParser {
             case FLOAT -> new Literal(Double.parseDouble(t.text()), NexaType.FLOAT64, t.span());
             case STRING -> new Literal(t.text(), NexaType.STRING, t.span());
             case TRUE -> new Literal(true, NexaType.BOOLEAN, t.span()); case FALSE -> new Literal(false, NexaType.BOOLEAN, t.span());
-            case IDENT -> new Var(t.text(), t.span()); case LBRACKET -> array(t); case LBRACE -> object(t);
+            case IDENT -> new Var(t.text(), t.span());
+            case TAG -> new TagRef(t.text().substring(1), t.span());
+            case LBRACKET -> array(t); case LBRACE -> object(t);
             case LPAREN -> { Expr e = expr(); expect(NexaToken.Kind.RPAREN); yield e; }
             default -> throw error("Expected expression");
         };
@@ -144,7 +146,7 @@ public final class NexaParser {
         NexaToken r = expect(NexaToken.Kind.RBRACE); return new ObjectLit(m, span(l.span().start(), r.span().end()));
     }
 
-    private void semi() { if (!match(NexaToken.Kind.SEMICOLON)) throw error("Expected ';'"); }
+    private void semi() { match(NexaToken.Kind.SEMICOLON); }
     private boolean match(NexaToken.Kind k) { if (at(k)) { p++; return true; } return false; }
     private boolean at(NexaToken.Kind k) { return tok(0).kind() == k; }
     private NexaToken next() { return ts.get(p++); }

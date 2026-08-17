@@ -9,11 +9,17 @@ public final class WorkspaceRuntime {
     private final String workspaceId;
     private final ConcurrentMap<String, FlowRuntime> flowsById;
     private final AtomicBoolean enabled;
+    private final nexa.framework.runtime.api.state.TypedTagStore tagStore;
 
     public WorkspaceRuntime(String workspaceId, boolean enabled) {
         this.workspaceId = workspaceId;
         this.flowsById = new ConcurrentHashMap<>();
         this.enabled = new AtomicBoolean(enabled);
+        this.tagStore = new nexa.framework.runtime.api.state.TypedTagStore(1024, 1024, 1024, 1024); // 1024 slots for lock-free array
+    }
+
+    public nexa.framework.runtime.api.state.TypedTagStore tagStore() {
+        return tagStore;
     }
 
     public String workspaceId() {

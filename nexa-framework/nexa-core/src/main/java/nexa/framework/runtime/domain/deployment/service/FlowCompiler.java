@@ -28,10 +28,18 @@ public final class FlowCompiler {
     private static final System.Logger LOGGER = System.getLogger(FlowCompiler.class.getName());
     private final FlowValidator validator;
     private final ConcurrentMap<String, WorkspaceCompilationSnapshot> workspaceCompilationCache;
+    private final nexa.framework.runtime.api.NexaCompilerService compilerService;
+    private final NexaClassLoader classLoader;
+    private final Map<String, Integer> tagSlots;
 
     public FlowCompiler(FlowValidator validator) {
         this.validator = validator;
         this.workspaceCompilationCache = new ConcurrentHashMap<>();
+        this.compilerService = java.util.ServiceLoader.load(nexa.framework.runtime.api.NexaCompilerService.class)
+                .findFirst()
+                .orElse(null);
+        this.classLoader = new NexaClassLoader(FlowCompiler.class.getClassLoader());
+        this.tagSlots = new ConcurrentHashMap<>();
     }
 
     public CompiledWorkspace compileWorkspace(WorkspaceDefinition definition) {
@@ -70,8 +78,26 @@ public final class FlowCompiler {
         validator.validate(definition);
         Map<String, CompiledNode> nodeById = new LinkedHashMap<>();
         for (NodeDefinition nodeDefinition : definition.nodes()) {
+            nexa.framework.runtime.api.NexaCompiledNode executableNode = null;
+            if (nodeDefinition.category() == NodeCategory.EXECUTOR && "script".equals(nodeDefinition.type())) {
+                String script = (String) nodeDefinition.config().get("script");
+                if (script == null) {
+                    script = (String) nodeDefinition.config().get("code");
+                }
+                if (script != null && compilerService != null) {
+                    try {
+                        String className = "nexa.generated.Node_" + nodeDefinition.id().replace('-', '_');
+                        byte[] classBytes = compilerService.compile(className, script, tagSlots);
+                        classLoader.registerClass(className, classBytes);
+                        Class<?> clazz = classLoader.loadClass(className);
+                        executableNode = (nexa.framework.runtime.api.NexaCompiledNode) clazz.getDeclaredConstructor().newInstance();
+                    } catch (Exception e) {
+                        LOGGER.log(System.Logger.Level.ERROR, "Gagal mengompilasi node " + nodeDefinition.id(), e);
+                    }
+                }
+            }
             nodeById.put(nodeDefinition.id(), new CompiledNode(nodeDefinition.id(), nodeDefinition.category(), nodeDefinition.type(),
-                    nodeDefinition.enabled(), nodeDefinition.inputPolicy(), nodeDefinition.config(), resolveLanguage(nodeDefinition)));
+                    nodeDefinition.enabled(), nodeDefinition.inputPolicy(), nodeDefinition.config(), resolveLanguage(nodeDefinition), executableNode));
         }
 
         Map<String, Map<String, List<String>>> routes = new LinkedHashMap<>();

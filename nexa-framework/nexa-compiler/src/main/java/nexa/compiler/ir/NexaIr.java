@@ -52,6 +52,7 @@ public final class NexaIr {
 
     public sealed interface Instruction permits
             Const, LoadLocal, StoreLocal,
+            LoadTag, StoreTag,
             LoadField, StoreField, LoadIndex, StoreIndex,
             ArrayCreate, ObjectCreate,
             Unary, Binary,
@@ -66,7 +67,11 @@ public final class NexaIr {
 
     public record LoadLocal(Value result, String name, SourceSpan span) implements Instruction {}
 
+    public record LoadTag(Value result, String name, SourceSpan span) implements Instruction {}
+
     public record StoreLocal(Value result, String name, Value value, boolean constant, SourceSpan span) implements Instruction {}
+
+    public record StoreTag(Value result, String name, Value value, SourceSpan span) implements Instruction {}
 
     public record LoadField(Value result, Value target, String field, SourceSpan span) implements Instruction {}
 

@@ -40,9 +40,22 @@ public final class NexaLexer {
                 case '&' -> { if (!match('&')) throw err("Expected &"); out.add(t(NexaToken.Kind.AND, st, p)); }
                 case '|' -> { if (!match('|')) throw err("Expected |"); out.add(t(NexaToken.Kind.OR, st, p)); }
                 case '"' -> out.add(string(st));
+                case '$' -> out.add(tag(st));
                 default -> { if (Character.isLetter(c) || c == '_') out.add(word(st)); else if (Character.isDigit(c)) out.add(number(st)); else throw err("Unexpected character '" + c + "'"); }
             }
         }
+    }
+
+    private NexaToken tag(int st) {
+        while (p < s.length()) {
+            char c = s.charAt(p);
+            if (Character.isLetterOrDigit(c) || c == '_' || c == '/') {
+                p++;
+            } else {
+                break;
+            }
+        }
+        return new NexaToken(NexaToken.Kind.TAG, s.substring(st, p), new SourceSpan(st, p));
     }
 
     private void skip() { while (p < s.length()) { char c = s.charAt(p); if (Character.isWhitespace(c)) { p++; continue; } if (c == '/' && p + 1 < s.length() && s.charAt(p + 1) == '/') { p += 2; while (p < s.length() && s.charAt(p) != '\n') p++; continue; } break; } }

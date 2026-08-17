@@ -148,6 +148,12 @@ public final class NexaIrLowerer {
             return result;
         }
 
+        if (expr instanceof TagRef tag) {
+            NexaIr.Value result = value(NexaType.OBJECT);
+            emit(new NexaIr.LoadTag(result, tag.name(), tag.span()));
+            return result;
+        }
+
         if (expr instanceof Field field) {
             NexaIr.Value target = expression(field.target());
             NexaType type = fieldType(target.type(), field.name());
@@ -280,6 +286,10 @@ public final class NexaIrLowerer {
             NexaIr.Local local = locals.get(variable.name());
             boolean constant = local != null && local.constant();
             emit(new NexaIr.StoreLocal(null, variable.name(), value, constant, span));
+            return;
+        }
+        if (target instanceof TagRef tag) {
+            emit(new NexaIr.StoreTag(null, tag.name(), value, span));
             return;
         }
         if (target instanceof Field field) {

@@ -40,7 +40,7 @@ final class ExecutionLifecycleManager {
             return;
         }
         Instant createdAt = Instant.now();
-        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()));
+        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()), workspaceRuntime.tagStore());
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, inputNode.id()));
         flowRuntime.statistics().incrementRunning();
         context.retainTask();
@@ -55,7 +55,7 @@ final class ExecutionLifecycleManager {
         if (!flowRuntime.compiledFlow().connection(connection.id()).enabled()) return;
 
         Instant createdAt = Instant.now();
-        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()));
+        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()), workspaceRuntime.tagStore());
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, connection.sourceNodeId()));
         flowRuntime.statistics().incrementRunning();
         context.retainTask();
@@ -112,7 +112,7 @@ final class ExecutionLifecycleManager {
 
     void injectMessage(WorkspaceRuntime workspaceRuntime, FlowRuntime flowRuntime, String sourceNodeId, RuntimeMessage message) {
         Instant createdAt = Instant.now();
-        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()));
+        ExecutionContext context = new ExecutionContext(workspaceRuntime.workspaceId(), flowRuntime.compiledFlow().flowId(), createdAt, createdAt.plus(configuration.maxExecutionLifetime()), workspaceRuntime.tagStore());
         flowRuntime.activeExecutions().put(context.executionId(), new ActiveExecution(context, sourceNodeId));
         flowRuntime.statistics().incrementRunning();
         context.retainTask();

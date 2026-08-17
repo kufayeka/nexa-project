@@ -97,8 +97,53 @@ final class NodeExecutor {
         nodeController.checkBreakpoint(node.id(), message);
         try {
             if (node.category() == NodeCategory.EXECUTOR) {
-                // TODO: Phase 4 AOT compiled bytecode executor
-                nodeController.incrementProcessed(node.id());
+                if (node.executableNode() != null) {
+                    var tagStore = context.tagStore();
+                    final boolean[] sent = {false};
+                    var apiContext = new nexa.framework.runtime.api.NexaExecutionContext() {
+                        @Override
+                        public void send(RuntimeMessage msg) {
+                            sent[0] = true;
+                            submitNodeRoutes(flowRuntime, context.executionId(), node.id(), "default", msg);
+                        }
+
+                        @Override
+                        public void send(String port, RuntimeMessage msg) {
+                            sent[0] = true;
+                            submitNodeRoutes(flowRuntime, context.executionId(), node.id(), port, msg);
+                        }
+
+                        @Override
+                        public void send(java.util.List<String> ports, RuntimeMessage msg) {
+                            sent[0] = true;
+                            for (String port : ports) {
+                                submitNodeRoutes(flowRuntime, context.executionId(), node.id(), port, msg.deepCopy());
+                            }
+                        }
+
+                        @Override
+                        public Object callHostCapability(String namespace, String name, java.util.List<Object> args) {
+                            return null;
+                        }
+
+                        @Override public int readTagInt(int idx) { return tagStore.readInt(idx); }
+                        @Override public void writeTagInt(int idx, int val) { tagStore.writeInt(idx, val); }
+                        @Override public long readTagLong(int idx) { return tagStore.readLong(idx); }
+                        @Override public void writeTagLong(int idx, long val) { tagStore.writeLong(idx, val); }
+                        @Override public double readTagDouble(int idx) { return tagStore.readDouble(idx); }
+                        @Override public void writeTagDouble(int idx, double val) { tagStore.writeDouble(idx, val); }
+                        @Override public Object readTagObject(int idx) { return tagStore.readObject(idx); }
+                        @Override public void writeTagObject(int idx, Object val) { tagStore.writeObject(idx, val); }
+                    };
+                    node.executableNode().execute(message, apiContext);
+                    nodeController.incrementProcessed(node.id());
+                    if (!sent[0]) {
+                        submitNodeRoutes(flowRuntime, context.executionId(), node.id(), "default", message);
+                    }
+                } else {
+                    nodeController.incrementProcessed(node.id());
+                    submitNodeRoutes(flowRuntime, context.executionId(), node.id(), "default", message);
+                }
                 return;
             }
             if (node.category() == NodeCategory.OUTPUT) {
@@ -108,6 +153,7 @@ final class NodeExecutor {
             }
             throw new ValidationException("Input node " + node.id() + " cannot be downstream target");
         } catch (Throwable throwable) {
+            throwable.printStackTrace();
             nodeController.incrementErrors(node.id());
             eventBus.publish("nexa/monitor/node/errors",
                     new nexa.framework.runtime.api.control.events.ScriptNodeFailureEvent(

@@ -12,7 +12,19 @@ public record CompiledNode(
         boolean enabled,
         InputExecutionPolicyDefinition inputPolicy,
         Map<String, Object> config,
-        String language) {
+        String language,
+        nexa.framework.runtime.api.NexaCompiledNode executableNode) {
+
+    public CompiledNode(
+            String id,
+            NodeCategory category,
+            String type,
+            boolean enabled,
+            InputExecutionPolicyDefinition inputPolicy,
+            Map<String, Object> config,
+            String language) {
+        this(id, category, type, enabled, inputPolicy, config, language, null);
+    }
 }
 
 

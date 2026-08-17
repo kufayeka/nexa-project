@@ -81,6 +81,9 @@ public final class NexaIrVerifier {
         }
 
         if (instruction instanceof NexaIr.LoadLocal load) {
+            if ("msg".equals(load.name()) || "message".equals(load.name())) {
+                return;
+            }
             NexaIr.Local local = locals.get(load.name());
             if (local == null) errors.add(new Diagnostic("Load of unknown local: " + load.name()));
             else if (!assignable(local.type(), load.result().type())) errors.add(new Diagnostic("Local load type mismatch for " + load.name()));
@@ -88,6 +91,9 @@ public final class NexaIrVerifier {
         }
 
         if (instruction instanceof NexaIr.StoreLocal store) {
+            if ("msg".equals(store.name()) || "message".equals(store.name())) {
+                return;
+            }
             NexaIr.Local local = locals.get(store.name());
             if (local == null) {
                 errors.add(new Diagnostic("Store to unknown local: " + store.name()));
