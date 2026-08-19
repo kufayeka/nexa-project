@@ -9,7 +9,7 @@ import nexa.plugin.asset.dto.AttributeDto;
 import nexa.plugin.asset.model.Asset;
 import nexa.plugin.asset.model.AssetTemplate;
 import nexa.plugin.asset.model.Attribute;
-import nexa.plugin.asset.script.AssetScriptExecutor;
+import nexa.plugin.asset.script.AssetScriptingEngine;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -26,11 +26,12 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
     private final Asset rootAsset = new Asset("root", "/", null);
     private final ConcurrentHashMap<String, AssetTemplate> templates = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Attribute> flatAttributes = new ConcurrentHashMap<>();
-    
+    private final AssetScriptingEngine scriptingEngine = new AssetScriptingEngine(this);
+
     // Dependency tracking
     private final ConcurrentHashMap<String, Set<String>> dependencies = new ConcurrentHashMap<>();
     private static final ThreadLocal<Set<String>> executionStack = ThreadLocal.withInitial(java.util.HashSet::new);
-    
+
     private ScheduledExecutorService scheduler;
     private NexaPluginContext pluginContext;
     private String configFilePath;
@@ -41,14 +42,8 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         return activeInstance;
     }
 
-    private static final ThreadLocal<Boolean> insideCalcScript = ThreadLocal.withInitial(() -> false);
-
-    public static void setInsideCalculationScript(boolean flag) {
-        insideCalcScript.set(flag);
-    }
-
-    public static boolean isInsideCalculationScript() {
-        return insideCalcScript.get();
+    public AssetScriptingEngine getScriptingEngine() {
+        return scriptingEngine;
     }
 
     @Override
@@ -140,6 +135,7 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
                 Thread.currentThread().interrupt();
             }
         }
+        scriptingEngine.clearCompiledScripts();
     }
 
     public Asset getRootAsset() {
@@ -182,13 +178,13 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         if (attr == null) {
             return false;
         }
-        if (isInsideCalculationScript()) {
+        if (scriptingEngine.isExecuting()) {
             throw new IllegalStateException("Direct write is prohibited inside attribute calculation scripts.");
         }
 
         Object finalVal = value;
         if (attr.getCalculationConfig() != null && "ON_WRITE".equals(attr.getCalculationConfig().triggerType())) {
-            finalVal = AssetScriptExecutor.executeCalculation(
+            finalVal = scriptingEngine.executeCalculation(
                 attr.getCalculationConfig().script(),
                 attr.getPath(),
                 attr.getValue(),
@@ -287,7 +283,7 @@ public final class AssetManagerResourcePlugin implements NexaResourcePlugin {
         if (attr == null || attr.getCalculationConfig() == null) return;
 
         Object oldVal = attr.getValue();
-        Object calculated = AssetScriptExecutor.executeCalculation(
+        Object calculated = scriptingEngine.executeCalculation(
             attr.getCalculationConfig().script(),
             attr.getPath(),
             attr.getValue(),

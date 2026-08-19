@@ -5,7 +5,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public final class Attribute {
     private final String name;
     private final String path;
-    private final String dataType;
+    private final AssetDataType dataType;
     private final CalculationConfig calculationConfig;
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -16,10 +16,14 @@ public final class Attribute {
     private String quality;
 
     public Attribute(String name, String path, String dataType, Object defaultValue, CalculationConfig calculationConfig) {
+        this(name, path, AssetDataType.parse(dataType), defaultValue, calculationConfig);
+    }
+
+    public Attribute(String name, String path, AssetDataType dataType, Object defaultValue, CalculationConfig calculationConfig) {
         this.name = name;
         this.path = path;
         this.dataType = dataType;
-        this.value = defaultValue;
+        this.value = dataType.coerce(defaultValue);
 
         this.oldValue = null;
         this.newValue = null;
@@ -30,7 +34,9 @@ public final class Attribute {
 
     public String getName() { return name; }
     public String getPath() { return path; }
-    public String getDataType() { return dataType; }
+    public String getDataType() { return dataType.name(); }
+    public AssetDataType getAssetDataType() { return dataType; }
+    public AssetDataType dataType() { return dataType; }
     public CalculationConfig getCalculationConfig() { return calculationConfig; }
 
     public Object getValue() {
@@ -82,7 +88,7 @@ public final class Attribute {
         lock.lock();
         try {
             this.oldValue = this.value;
-            this.value = val;
+            this.value = dataType.coerce(val);
             this.timestamp = System.currentTimeMillis();
             this.quality = q;
         } finally {
@@ -93,15 +99,15 @@ public final class Attribute {
     public void setNewValue(Object val) {
         lock.lock();
         try {
-            this.newValue = val;
+            this.newValue = dataType.coerce(val);
         } finally {
             lock.unlock();
         }
     }
 
     public static record CalculationConfig(
-        String triggerType, // "INTERVAL", "ON_CHANGE", "ON_WRITE"
-        String intervalExpr, // e.g. "1s"
+        String triggerType,
+        String intervalExpr,
         String script
     ) {}
 }
